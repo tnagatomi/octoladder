@@ -2,7 +2,7 @@ class Ranking
   Row = Data.define(:rank, :user, :count, :buckets)
 
   def initialize(entries)
-    @entries = Array(entries).map(&:to_h)
+    @entries = entries.map(&:to_h)
   end
 
   def rows
@@ -27,11 +27,12 @@ class Ranking
   # Zero-count entries are omitted.
   def compute
     sorted = @entries
-      .reject { |e| e[:count].to_i.zero? }
-      .sort_by { |e| -e[:count].to_i }
+      .reject { |e| e[:count].zero? }
+      .sort_by { |e| -e[:count] }
 
     sorted.each_with_index.with_object([]) do |(entry, idx), ranked|
-      rank = idx.positive? && entry[:count] == ranked.last.count ? ranked.last.rank : idx + 1
+      tied = ranked.any? && entry[:count] == ranked.last.count
+      rank = tied ? ranked.last.rank : idx + 1
       ranked << Row.new(rank:, user: entry[:user], count: entry[:count], buckets: entry[:buckets] || [])
     end
   end
