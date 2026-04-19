@@ -18,7 +18,9 @@ class Period
       case type.to_sym
       when :weekly
         m = param.to_s.match(/\A(\d{4})-W(\d{1,2})\z/) or raise InvalidParam, "invalid weekly param: #{param.inspect}"
-        date = Date.commercial(m[1].to_i, m[2].to_i, 1)
+        year, week = m[1].to_i, m[2].to_i
+        raise InvalidParam, "invalid weekly param: #{param.inspect}" unless Date.valid_commercial?(year, week, 1)
+        date = Date.commercial(year, week, 1)
         new(type: :weekly, starts_at: Time.zone.local(date.year, date.month, date.day))
       when :monthly
         m = param.to_s.match(/\A(\d{4})-(\d{1,2})\z/) or raise InvalidParam, "invalid monthly param: #{param.inspect}"
@@ -29,8 +31,6 @@ class Period
       else
         raise ArgumentError, "unknown period type: #{type.inspect}"
       end
-    rescue Date::Error => e
-      raise InvalidParam, e.message
     end
   end
 
@@ -108,9 +108,9 @@ class Period
 
   def step(direction)
     case type
-    when :weekly  then starts_at + direction * 7.days
-    when :monthly then direction.positive? ? starts_at.next_month : starts_at.prev_month
-    when :yearly  then direction.positive? ? starts_at.next_year  : starts_at.prev_year
+    when :weekly  then starts_at.advance(weeks:  direction)
+    when :monthly then starts_at.advance(months: direction)
+    when :yearly  then starts_at.advance(years:  direction)
     end
   end
 
