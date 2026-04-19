@@ -1,15 +1,15 @@
 class RankingsController < ApplicationController
   FAKE_ROWS = [
-    { login: "ayanami-r",   name: "Ryosuke Ayanami",   daily: [3, 4, 2, 3, 1, 1, 1], color: "#e9b872" },
-    { login: "ernestina",   name: "Ernestina Vogel",   daily: [2, 2, 3, 2, 1, 1, 0], color: "#8fa7f5" },
-    { login: "k-saotome",   name: "Kaede Saotome",     daily: [1, 2, 1, 2, 1, 0, 1], color: "#d58aa1" },
-    { login: "bashouba",    name: "Basho Banana",      daily: [0, 1, 2, 1, 2, 1, 1], color: "#7ad1a8" },
-    { login: "matsumoto-k", name: "Ken Matsumoto",     daily: [2, 1, 1, 1, 1, 0, 1], color: "#b89fe0" },
-    { login: "octonight",   name: "Octavia Knight",    daily: [1, 1, 1, 1, 0, 1, 0], color: "#f09874" },
-    { login: "rgx-devil",   name: "Rei Goto",          daily: [1, 0, 1, 1, 1, 0, 0], color: "#6bc3c3" },
-    { login: "yuki-mori",   name: "Yuki Morimoto",     daily: [0, 1, 1, 0, 1, 1, 0], color: "#c9b88b" },
-    { login: "tsubaki-ll",  name: "Tsubaki Llewelyn",  daily: [0, 1, 0, 1, 0, 1, 0], color: "#e9b872" },
-    { login: "hoshinomk",   name: "Maiko Hoshino",     daily: [0, 0, 0, 1, 0, 0, 0], color: "#7ad1a8" }
+    { login: "ayanami-r",   name: "Ryosuke Ayanami",   daily: [ 3, 4, 2, 3, 1, 1, 1 ], color: "#e9b872" },
+    { login: "ernestina",   name: "Ernestina Vogel",   daily: [ 2, 2, 3, 2, 1, 1, 0 ], color: "#8fa7f5" },
+    { login: "k-saotome",   name: "Kaede Saotome",     daily: [ 1, 2, 1, 2, 1, 0, 1 ], color: "#d58aa1" },
+    { login: "bashouba",    name: "Basho Banana",      daily: [ 0, 1, 2, 1, 2, 1, 1 ], color: "#7ad1a8" },
+    { login: "matsumoto-k", name: "Ken Matsumoto",     daily: [ 2, 1, 1, 1, 1, 0, 1 ], color: "#b89fe0" },
+    { login: "octonight",   name: "Octavia Knight",    daily: [ 1, 1, 1, 1, 0, 1, 0 ], color: "#f09874" },
+    { login: "rgx-devil",   name: "Rei Goto",          daily: [ 1, 0, 1, 1, 1, 0, 0 ], color: "#6bc3c3" },
+    { login: "yuki-mori",   name: "Yuki Morimoto",     daily: [ 0, 1, 1, 0, 1, 1, 0 ], color: "#c9b88b" },
+    { login: "tsubaki-ll",  name: "Tsubaki Llewelyn",  daily: [ 0, 1, 0, 1, 0, 1, 0 ], color: "#e9b872" },
+    { login: "hoshinomk",   name: "Maiko Hoshino",     daily: [ 0, 0, 0, 1, 0, 0, 0 ], color: "#7ad1a8" }
   ].freeze
 
   def weekly

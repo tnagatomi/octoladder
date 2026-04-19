@@ -101,7 +101,7 @@ class Period
   alias_method :eql?, :==
 
   def hash
-    [type, starts_at].hash
+    [ type, starts_at ].hash
   end
 
   private
