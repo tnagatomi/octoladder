@@ -9,6 +9,9 @@ Rails.application.routes.draw do
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
-  # Defines the root path route ("/")
-  # root "posts#index"
+  get "rankings/weekly",  to: "rankings#weekly",  as: :weekly_ranking
+  get "rankings/monthly", to: "rankings#weekly",  as: :monthly_ranking
+  get "rankings/yearly",  to: "rankings#weekly",  as: :yearly_ranking
+
+  root "rankings#weekly"
 end
