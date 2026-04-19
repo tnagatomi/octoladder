@@ -1,0 +1,16 @@
+# Declarative list of GitHub teams whose members Octladder should track.
+# Edit this file, commit, and redeploy (or wait for the next sync) to add or
+# remove teams. Both additions and removals are reconciled against the DB on
+# each sync run.
+#
+# Each entry requires:
+#   - org:       the GitHub org login (e.g. "rails")
+#   - team_slug: the team slug within that org (e.g. "core")
+#
+# Example:
+#   - org: rails
+#     team_slug: core
+#   - org: rails
+#     team_slug: activerecord
+
+[]
