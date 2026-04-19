@@ -24,7 +24,9 @@ class Period
         new(type: :weekly, starts_at: Time.zone.local(date.year, date.month, date.day))
       when :monthly
         m = param.to_s.match(/\A(\d{4})-(\d{1,2})\z/) or raise InvalidParam, "invalid monthly param: #{param.inspect}"
-        new(type: :monthly, starts_at: Time.zone.local(m[1].to_i, m[2].to_i, 1))
+        year, month = m[1].to_i, m[2].to_i
+        raise InvalidParam, "invalid monthly param: #{param.inspect}" unless (1..12).cover?(month)
+        new(type: :monthly, starts_at: Time.zone.local(year, month, 1))
       when :yearly
         m = param.to_s.match(/\A(\d{4})\z/) or raise InvalidParam, "invalid yearly param: #{param.inspect}"
         new(type: :yearly, starts_at: Time.zone.local(m[1].to_i, 1, 1))

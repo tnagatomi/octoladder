@@ -101,6 +101,11 @@ class PeriodTest < ActiveSupport::TestCase
     assert_raises(Period::InvalidParam) { Period.parse(:yearly,  "20xx") }
   end
 
+  test "parse rejects out-of-range months" do
+    assert_raises(Period::InvalidParam) { Period.parse(:monthly, "2026-13") }
+    assert_raises(Period::InvalidParam) { Period.parse(:monthly, "2026-00") }
+  end
+
   test "parse rejects impossible ISO week numbers" do
     # 2026 has 53 ISO weeks? Actually 2026 has 53 weeks only if Jan 1 is Thu (or leap year + Wed).
     # 2026-01-01 is Thursday so it does have 53. Use a year known to have 52.
