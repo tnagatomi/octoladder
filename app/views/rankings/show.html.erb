@@ -1,0 +1,132 @@
+<% content_for :title, "#{@type.to_s.capitalize} · Octladder" %>
+
+<%
+  tabs = [
+    [ :weekly,  "Weekly",  weekly_ranking_path ],
+    [ :monthly, "Monthly", monthly_ranking_path ],
+    [ :yearly,  "Yearly",  yearly_ranking_path ]
+  ]
+
+  prev_path = send("#{@type}_ranking_path", id: @period.prev.to_param)
+  next_period = @period.next
+  next_disabled = !next_period.complete?
+  next_path = next_disabled ? nil : send("#{@type}_ranking_path", id: next_period.to_param)
+
+  bucket_legend = case @type
+  when :weekly  then "Mon → Sun"
+  when :monthly then "Week 1 → 4"
+  when :yearly  then "Jan → Dec"
+  end
+%>
+
+<header class="bg-header-bg text-header-fg">
+  <div class="mx-auto flex max-w-[1012px] items-center justify-between px-6 py-3">
+    <a href="<%= weekly_ranking_path %>" class="flex items-center gap-2 text-[15px] font-semibold">
+      <svg viewBox="0 0 16 16" width="22" height="22" fill="currentColor" aria-hidden="true">
+        <path d="M3 2.75A2.75 2.75 0 0 1 5.75 0h4.5a.75.75 0 0 1 0 1.5h-4.5c-.69 0-1.25.56-1.25 1.25v10.5c0 .69.56 1.25 1.25 1.25h4.5a.75.75 0 0 1 0 1.5h-4.5A2.75 2.75 0 0 1 3 13.25Z"/>
+        <path d="M7 4.75A.75.75 0 0 1 7.75 4h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 7 4.75Zm0 3A.75.75 0 0 1 7.75 7h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 7 7.75Zm0 3a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 7 10.75Z"/>
+      </svg>
+      Octladder
+    </a>
+  </div>
+</header>
+
+<main class="mx-auto max-w-[1012px] px-6 py-6">
+  <h1 class="mb-1 text-2xl font-semibold"><%= @type.to_s.capitalize %> ranking</h1>
+  <p class="mb-5 text-fg-muted">Merged pull requests authored by tracked members in public repositories.</p>
+
+  <nav class="mb-5 flex border-b border-border">
+    <% tabs.each do |type, label, path| %>
+      <% active = (@type == type) %>
+      <a href="<%= path %>" class="-mb-px border-b-2 px-3 py-2 text-sm <%= active ? "border-[#fd8c73] font-semibold" : "border-transparent text-fg-muted hover:border-border-muted hover:text-fg" %>">
+        <%= label %>
+      </a>
+    <% end %>
+  </nav>
+
+  <section class="mb-5 rounded-md border border-border bg-canvas">
+    <div class="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
+      <a href="<%= prev_path %>" class="flex items-center gap-1 text-sm text-accent hover:underline">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.275.326.75.75 0 0 1-.215.734L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z"/></svg>
+        Previous
+      </a>
+      <div class="text-center">
+        <div class="text-sm font-semibold"><%= @period.label %></div>
+        <% if @period.subtitle %>
+          <div class="text-xs text-fg-muted"><%= @period.subtitle %></div>
+        <% end %>
+      </div>
+      <% if next_disabled %>
+        <span aria-disabled="true" class="flex cursor-not-allowed items-center gap-1 text-sm text-fg-subtle/60">
+          Next
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.275-.326.75.75 0 0 1 .215-.734L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
+        </span>
+      <% else %>
+        <a href="<%= next_path %>" class="flex items-center gap-1 text-sm text-accent hover:underline">
+          Next
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.275-.326.75.75 0 0 1 .215-.734L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
+        </a>
+      <% end %>
+    </div>
+
+    <div class="grid grid-cols-2 divide-x divide-border">
+      <div class="px-4 py-3">
+        <div class="text-xs text-fg-muted">Merged PRs</div>
+        <div class="text-xl font-semibold tabular-nums"><%= @ranking.total_count %></div>
+      </div>
+      <div class="px-4 py-3">
+        <div class="text-xs text-fg-muted">Contributors</div>
+        <div class="text-xl font-semibold tabular-nums"><%= @ranking.contributor_count %></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-md border border-border bg-canvas">
+    <header class="flex items-center justify-end gap-6 border-b border-border bg-canvas-subtle px-4 py-2 text-xs text-fg-muted">
+      <span class="font-mono"><%= bucket_legend %></span>
+      <span class="w-20 text-right font-semibold tracking-wide">PRs</span>
+    </header>
+
+    <% if @ranking.empty? %>
+      <div class="px-4 py-8 text-center text-sm text-fg-muted">No merged pull requests in this period.</div>
+    <% else %>
+      <ol>
+        <% @ranking.rows.each_with_index do |row, i| %>
+          <% user = row.user %>
+          <li class="flex items-center gap-4 px-4 py-3 <%= "border-t border-border" if i > 0 %> hover:bg-canvas-subtle">
+            <div class="w-10 shrink-0 text-right font-mono text-lg font-semibold tabular-nums <%= row.rank <= 3 ? "text-fg" : "text-fg-muted" %>">
+              <%= row.rank %>
+            </div>
+
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border font-mono text-sm"
+                 style="background-color: <%= user[:color] %>22; color: <%= user[:color] %>;">
+              <%= user[:login][0, 2].upcase %>
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <a href="#" class="font-semibold text-accent hover:underline">@<%= user[:login] %></a>
+              <span class="ml-2 text-sm text-fg-muted"><%= user[:name] %></span>
+            </div>
+
+            <div class="hidden shrink-0 sm:block">
+              <div class="flex h-6 items-end gap-0.5" title="<%= bucket_legend %>">
+                <% row.buckets.each do |count| %>
+                  <div class="w-2 rounded-sm <%= count > 0 ? "bg-success" : "bg-canvas-inset" %>"
+                       style="height: <%= [ count * 6 + 2, 3 ].max %>px"></div>
+                <% end %>
+              </div>
+            </div>
+
+            <div class="w-20 shrink-0 text-right text-3xl font-semibold tabular-nums">
+              <%= row.count %>
+            </div>
+          </li>
+        <% end %>
+      </ol>
+    <% end %>
+  </section>
+
+  <footer class="mt-8 text-right text-xs text-fg-muted">
+    <span class="font-mono">Octladder v0.1</span>
+  </footer>
+</main>

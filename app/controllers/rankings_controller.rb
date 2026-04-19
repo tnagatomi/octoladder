@@ -1,44 +1,52 @@
 class RankingsController < ApplicationController
-  FAKE_ROWS = [
-    { login: "ayanami-r",   name: "Ryosuke Ayanami",   daily: [ 3, 4, 2, 3, 1, 1, 1 ], color: "#e9b872" },
-    { login: "ernestina",   name: "Ernestina Vogel",   daily: [ 2, 2, 3, 2, 1, 1, 0 ], color: "#8fa7f5" },
-    { login: "k-saotome",   name: "Kaede Saotome",     daily: [ 1, 2, 1, 2, 1, 0, 1 ], color: "#d58aa1" },
-    { login: "bashouba",    name: "Basho Banana",      daily: [ 0, 1, 2, 1, 2, 1, 1 ], color: "#7ad1a8" },
-    { login: "matsumoto-k", name: "Ken Matsumoto",     daily: [ 2, 1, 1, 1, 1, 0, 1 ], color: "#b89fe0" },
-    { login: "octonight",   name: "Octavia Knight",    daily: [ 1, 1, 1, 1, 0, 1, 0 ], color: "#f09874" },
-    { login: "rgx-devil",   name: "Rei Goto",          daily: [ 1, 0, 1, 1, 1, 0, 0 ], color: "#6bc3c3" },
-    { login: "yuki-mori",   name: "Yuki Morimoto",     daily: [ 0, 1, 1, 0, 1, 1, 0 ], color: "#c9b88b" },
-    { login: "tsubaki-ll",  name: "Tsubaki Llewelyn",  daily: [ 0, 1, 0, 1, 0, 1, 0 ], color: "#e9b872" },
-    { login: "hoshinomk",   name: "Maiko Hoshino",     daily: [ 0, 0, 0, 1, 0, 0, 0 ], color: "#7ad1a8" }
+  FAKE_USERS = [
+    { login: "ayanami-r",   name: "Ryosuke Ayanami",   color: "#e9b872" },
+    { login: "ernestina",   name: "Ernestina Vogel",   color: "#8fa7f5" },
+    { login: "k-saotome",   name: "Kaede Saotome",     color: "#d58aa1" },
+    { login: "bashouba",    name: "Basho Banana",      color: "#7ad1a8" },
+    { login: "matsumoto-k", name: "Ken Matsumoto",     color: "#b89fe0" },
+    { login: "octonight",   name: "Octavia Knight",    color: "#f09874" },
+    { login: "rgx-devil",   name: "Rei Goto",          color: "#6bc3c3" },
+    { login: "yuki-mori",   name: "Yuki Morimoto",     color: "#c9b88b" },
+    { login: "tsubaki-ll",  name: "Tsubaki Llewelyn",  color: "#e9b872" },
+    { login: "hoshinomk",   name: "Maiko Hoshino",     color: "#7ad1a8" }
   ].freeze
 
-  def weekly
-    @period_label = "April 6 — April 12"
-    @period_sub   = "Week 15 · 2026"
-    @prev_label   = "Week 14"
-    @next_label   = "Week 16"
-    @next_disabled = true
+  BUCKET_COUNTS = { weekly: 7, monthly: 4, yearly: 12 }.freeze
 
-    rows = FAKE_ROWS.map { |r| r.merge(count: r[:daily].sum) }
-    @rows = assign_competitive_ranks(rows)
-    @total_prs = rows.sum { |r| r[:count] }
-    @contributor_count = rows.count { |r| r[:count] > 0 }
+  def weekly
+    render_ranking(:weekly)
+  end
+
+  def monthly
+    render_ranking(:monthly)
+  end
+
+  def yearly
+    render_ranking(:yearly)
   end
 
   private
 
-  # Competitive rank: ties share the rank, next rank skips (1, 1, 3, ...).
-  def assign_competitive_ranks(rows)
-    sorted = rows.sort_by { |r| -r[:count] }
-    ranked = []
-    sorted.each_with_index do |row, idx|
-      rank = if idx > 0 && row[:count] == ranked.last[:count]
-        ranked.last[:rank]
-      else
-        idx + 1
-      end
-      ranked << row.merge(rank: rank)
+  def render_ranking(type)
+    @type    = type
+    @period  = params[:id].present? ? Period.parse(type, params[:id]) : Period.latest_closed(type)
+    @ranking = Ranking.new(fake_entries_for(@period))
+    render :show
+  rescue Period::InvalidParam
+    head :not_found
+  end
+
+  def fake_entries_for(period)
+    FAKE_USERS.map do |user|
+      buckets = fake_buckets(period, user)
+      { user: user, count: buckets.sum, buckets: buckets }
     end
-    ranked
+  end
+
+  # Deterministic per (period, user) so navigation is stable across requests.
+  def fake_buckets(period, user)
+    rng = Random.new("#{period.to_param}-#{user[:login]}".hash.abs)
+    Array.new(BUCKET_COUNTS[period.type]) { rng.rand(0..3) }
   end
 end
