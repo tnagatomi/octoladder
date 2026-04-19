@@ -1,0 +1,9 @@
+platform:
+  org_login: acme
+  slug: platform
+  name: Platform
+
+infra:
+  org_login: acme
+  slug: infra
+  name: Infrastructure
