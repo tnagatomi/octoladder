@@ -149,6 +149,29 @@ class GithubClientTest < ActiveSupport::TestCase
       query: hash_including("q" => expected_q)
   end
 
+  test "merged_prs rejects logins that GitHub would never issue" do
+    [ "", "bad login", "foo OR is:public", "-leading-hyphen", "a" * 40 ].each do |bad|
+      assert_raises(GithubClient::InvalidLogin) do
+        @client.merged_prs(bad, from: Time.utc(2026, 1, 1), to: Time.utc(2026, 2, 1))
+      end
+    end
+    assert_not_requested :get, %r{api\.github\.com}
+  end
+
+  test "merged_prs raises ResultsTruncated when GitHub reports more than 1000 hits" do
+    stub_request(:get, %r{api\.github\.com/search/issues})
+      .to_return(
+        status: 200,
+        headers: { "Content-Type" => "application/json" },
+        body: { total_count: 1001, items: [] }.to_json
+      )
+
+    error = assert_raises(GithubClient::ResultsTruncated) do
+      @client.merged_prs("octocat", from: Time.utc(2026, 1, 1), to: Time.utc(2027, 1, 1))
+    end
+    assert_match(/1001/, error.message)
+  end
+
   test "merged_prs authenticates with the supplied token" do
     stub_request(:get, %r{api\.github\.com/search/issues})
       .with(headers: { "Authorization" => "token test-token" })

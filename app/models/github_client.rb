@@ -1,10 +1,12 @@
 require "octokit"
 
-# Thin wrapper over Octokit that exposes only the endpoints Octladder needs
-# and converts Sawyer::Resource responses into plain symbol-keyed hashes so
-# the rest of the app never touches Octokit types.
 class GithubClient
-  class MissingToken < StandardError; end
+  class MissingToken < ArgumentError; end
+  class InvalidLogin < ArgumentError; end
+  class ResultsTruncated < StandardError; end
+
+  LOGIN_PATTERN     = /\A[a-zA-Z0-9][a-zA-Z0-9-]{0,38}\z/
+  SEARCH_RESULT_CAP = 1000
 
   def self.from_env
     token = ENV["GITHUB_TOKEN"].to_s.strip
@@ -17,23 +19,28 @@ class GithubClient
   end
 
   def team_members(org, slug)
-    @client.paginate("/orgs/#{org}/teams/#{slug}/members", per_page: 100).map do |user|
+    @client.paginate("/orgs/#{org}/teams/#{slug}/members").map do |user|
       { github_id: user.id, login: user.login, avatar_url: user.avatar_url }
     end
   end
 
   # from is inclusive, to is exclusive (matches Period's half-open interval).
-  # GitHub's merged: filter is inclusive on both ends, so we subtract a second.
   def merged_prs(login, from:, to:)
-    range = "#{from.utc.iso8601}..#{(to.utc - 1.second).iso8601}"
-    query = %(is:pr is:merged is:public author:#{login} merged:#{range})
+    raise InvalidLogin, "invalid GitHub login: #{login.inspect}" unless LOGIN_PATTERN.match?(login)
 
-    @client.search_issues(query).items.map do |item|
+    range  = "#{from.utc.iso8601}..#{(to.utc - 1.second).iso8601}"
+    result = @client.search_issues("is:pr is:merged is:public author:#{login} merged:#{range}")
+
+    if result.total_count > SEARCH_RESULT_CAP
+      raise ResultsTruncated, "GitHub search returned #{result.total_count} results for #{login}, exceeding the 1000-result cap"
+    end
+
+    result.items.map do |item|
       {
-        github_id:       item.id,
-        merged_at:       item.pull_request.merged_at,
-        html_url:        item.html_url,
-        repo_full_name:  item.repository_url.split("/").last(2).join("/")
+        github_id:      item.id,
+        merged_at:      item.pull_request.merged_at,
+        html_url:       item.html_url,
+        repo_full_name: Octokit::Repository.from_url(item.repository_url).slug
       }
     end
   end
