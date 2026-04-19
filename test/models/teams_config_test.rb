@@ -11,9 +11,9 @@ class TeamsConfigTest < ActiveSupport::TestCase
     assert_equal "platform", config.entries.first.slug
   end
 
-  test "is iterable via Enumerable" do
+  test "entries are frozen so callers cannot mutate them" do
     config = TeamsConfig.new([ { "org" => "acme", "team_slug" => "platform" } ])
-    assert_equal [ [ "acme", "platform" ] ], config.map { |e| [ e.org, e.slug ] }
+    assert config.entries.frozen?
   end
 
   test "strips surrounding whitespace" do
@@ -84,7 +84,7 @@ class TeamsConfigTest < ActiveSupport::TestCase
       YAML
       f.flush
       config = TeamsConfig.load(f.path)
-      assert_equal [ [ "acme", "platform" ], [ "beta", "sre" ] ], config.map { |e| [ e.org, e.slug ] }
+      assert_equal [ [ "acme", "platform" ], [ "beta", "sre" ] ], config.entries.map { |e| [ e.org, e.slug ] }
     end
   end
 
