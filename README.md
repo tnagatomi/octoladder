@@ -1,35 +1,26 @@
 # Octoladder
 
-Visualize and rank merged-PR contributions of members of one or more GitHub
-organizations. Distributed as a **composite GitHub Action**: operators add a
-single workflow file to their own repository, the action does the rest, and
-upgrades arrive as small `dependabot` PRs that bump the action's version pin.
+Visualize and rank merged-PR contributions of members of one or more GitHub organizations. Distributed as a **composite GitHub Action**: operators add a single workflow file to their own repository, the action does the rest, and upgrades arrive as small `dependabot` PRs that bump the action's version pin.
 
 ## How it works
 
-The action runs in the operator's repository each week (or on manual
-dispatch):
+The action runs in the operator's repository each week (or on manual dispatch):
 
 1. Reconciles tracked GitHub team membership across one or more orgs.
 2. Fetches newly merged PRs by tracked authors via GitHub's search API.
-3. Persists the canonical state in `data/state.json` (committed back to
-   the operator's repo).
-4. Renders a static site to `site/` with weekly, monthly, and yearly
-   ranking views.
+3. Persists the canonical state in `data/state.json` (committed back to the operator's repo).
+4. Renders a static site to `site/` with weekly, monthly, and yearly ranking views.
 5. The operator's workflow uploads `site/` to GitHub Pages.
 
-Period boundaries (Mon–Sun weekly, calendar months, calendar years) honor
-the configured time zone (default `Asia/Tokyo`).
+Period boundaries (Mon–Sun weekly, calendar months, calendar years) honor the configured time zone (default `Asia/Tokyo`).
 
 ## Operator setup
 
-You'll need a fresh repository in your org to host the configuration, the
-generated state, and the published Pages site.
+You'll need a fresh repository in your org to host the configuration, the generated state, and the published Pages site.
 
 ### 1. Create the repository
 
-A bare repository is enough — the action provides all the code. The
-operator-side files are just configuration:
+A bare repository is enough — the action provides all the code. The operator-side files are just configuration:
 
 ```
 your-octoladder-repo/
@@ -108,22 +99,14 @@ jobs:
 
 ### 4. Add the Personal Access Token
 
-Create a classic PAT with `read:org` scope at
-[github.com/settings/tokens](https://github.com/settings/tokens) and add it
-as the repository secret named **`OCTOLADDER_GITHUB_TOKEN`** (Settings →
-Secrets and variables → Actions).
+Create a classic PAT with `read:org` scope at [github.com/settings/tokens](https://github.com/settings/tokens) and add it as the repository secret named **`OCTOLADDER_GITHUB_TOKEN`** (Settings → Secrets and variables → Actions).
 
-The default `GITHUB_TOKEN` cannot read team membership across orgs (no
-`members:read` permission exists for it), which is why a PAT is required.
+The default `GITHUB_TOKEN` cannot read team membership across orgs (no `members:read` permission exists for it), which is why a PAT is required.
 
-The PAT is issued under your own GitHub account; admin approval is generally
-**not** required. Caveats:
+The PAT is issued under your own GitHub account; admin approval is generally **not** required. Caveats:
 
-- **SAML SSO orgs.** On the PAT page, click `Configure SSO` and authorize
-  the token for each org. Self-service, no admin needed.
-- **Secret teams.** The PAT can only read members of teams you can see in
-  the UI. If `teams.yml` lists a secret team, you must be a member (or an
-  org admin).
+- **SAML SSO orgs.** On the PAT page, click `Configure SSO` and authorize the token for each org. Self-service, no admin needed.
+- **Secret teams.** The PAT can only read members of teams you can see in the UI. If `teams.yml` lists a secret team, you must be a member (or an org admin).
 - **Multi-org setups.** You must be a member of every org listed.
 
 ### 5. Enable GitHub Pages
@@ -131,14 +114,11 @@ The PAT is issued under your own GitHub account; admin approval is generally
 Settings → Pages → Build and deployment:
 
 - Source: **GitHub Actions**
-- Visibility: **Private** (Enterprise required for private Pages; access is
-  governed by repo read permission)
+- Visibility: **Private** (Enterprise required for private Pages; access is governed by repo read permission)
 
 ### 6. Run the first sync
 
-Actions tab → "Sync and publish" → **Run workflow**. The first run backfills
-to January 1 of the previous calendar year, so weekly / monthly / yearly
-views are populated on day one. After that, the schedule takes over.
+Actions tab → "Sync and publish" → **Run workflow**. The first run backfills to January 1 of the previous calendar year, so weekly / monthly / yearly views are populated on day one. After that, the schedule takes over.
 
 ### 7. (Optional) Auto-update the action
 
@@ -152,8 +132,7 @@ updates:
     schedule: { interval: weekly }
 ```
 
-Dependabot will open PRs whenever `tnagatomi/octoladder` (or the other
-pinned actions) ships a new version. Merge to upgrade.
+Dependabot will open PRs whenever `tnagatomi/octoladder` (or the other pinned actions) ships a new version. Merge to upgrade.
 
 ## Action inputs
 
@@ -171,23 +150,15 @@ pinned actions) ships a new version. Merge to upgrade.
 time_zone: Asia/Tokyo   # IANA name; default: Asia/Tokyo
 ```
 
-If you change the time zone, also adjust the cron expression in your
-workflow so the schedule fires on Monday morning local time (Actions cron
-is UTC-only).
+If you change the time zone, also adjust the cron expression in your workflow so the schedule fires on Monday morning local time (Actions cron is UTC-only).
 
 ## Operating
 
-**Add or remove a team.** Edit `config/teams.yml`, commit, push. The next
-sync picks it up. Or trigger "Sync and publish" manually for immediate
-effect.
+**Add or remove a team.** Edit `config/teams.yml`, commit, push. The next sync picks it up. Or trigger "Sync and publish" manually for immediate effect.
 
-**Member turnover.** Handled on GitHub. The next sync reflects it: new
-members start being tracked, removed members are marked inactive. Their
-historical PRs stay in past rankings; only future PR fetching stops.
+**Member turnover.** Handled on GitHub. The next sync reflects it: new members start being tracked, removed members are marked inactive. Their historical PRs stay in past rankings; only future PR fetching stops.
 
-**Recovering from a bad sync.** Revert the offending commit on
-`data/state.json` and re-run the workflow. State lives in git, so recovery
-is `git revert`.
+**Recovering from a bad sync.** Revert the offending commit on `data/state.json` and re-run the workflow. State lives in git, so recovery is `git revert`.
 
 ## Local development (this repository)
 
@@ -198,18 +169,11 @@ npm run type-check     # tsc --noEmit
 npm run build          # bundle dist/index.js with @vercel/ncc
 ```
 
-`dist/` must be re-committed whenever `src/` changes — a `check-dist`
-workflow guards against drift on PR.
+`dist/` must be re-committed whenever `src/` changes — a `check-dist` workflow guards against drift on PR.
 
 ## Troubleshooting
 
-- **`Octokit::NotFound` / 404 on a team**: the PAT can't see that team
-  (wrong slug, secret team you're not a member of, SSO not authorized for
-  the org).
-- **`ResultsTruncated` for a user**: that user has more than 1000 merged
-  PRs in the search window, which is GitHub's API hard cap.
-- **Pages deploy fails with `Get Pages site failed`**: Pages source isn't
-  set to "GitHub Actions" yet. Re-do step 5 of setup.
-- **Push rejected on the state commit**: a concurrent commit landed on
-  `main` between checkout and push. The workflow's `git pull --rebase`
-  handles the common case; re-run the workflow to retry.
+- **`Octokit::NotFound` / 404 on a team**: the PAT can't see that team (wrong slug, secret team you're not a member of, SSO not authorized for the org).
+- **`ResultsTruncated` for a user**: that user has more than 1000 merged PRs in the search window, which is GitHub's API hard cap.
+- **Pages deploy fails with `Get Pages site failed`**: Pages source isn't set to "GitHub Actions" yet. Re-do step 5 of setup.
+- **Push rejected on the state commit**: a concurrent commit landed on `main` between checkout and push. The workflow's `git pull --rebase` handles the common case; re-run the workflow to retry.
