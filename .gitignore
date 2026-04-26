@@ -41,5 +41,7 @@
 /node_modules/
 *.tsbuildinfo
 
-# Bundled action artifact (committed only on tagged releases).
-/dist/
+# Note: dist/ is intentionally committed. GitHub Actions resolves a JS
+# action's `main:` from the tag's tree, so the bundled artifact must ship
+# alongside the source. Re-run `npm run build` and commit dist/ before
+# tagging a release.

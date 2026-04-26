@@ -1,0 +1,36 @@
+name: Octoladder
+description: >-
+  Sync GitHub team-member merged-PR contributions and render a static site
+  to publish on (private) GitHub Pages.
+author: Takayuki Nagatomi
+
+branding:
+  icon: bar-chart-2
+  color: blue
+
+inputs:
+  token:
+    description: >-
+      Personal Access Token (classic) with `read:org` scope. The default
+      `GITHUB_TOKEN` cannot read team membership across orgs.
+    required: true
+  config-path:
+    description: Path (relative to the workspace) to the runtime config YAML.
+    required: false
+    default: config/octoladder.yml
+  teams-path:
+    description: Path (relative to the workspace) to the tracked-teams YAML.
+    required: false
+    default: config/teams.yml
+  state-path:
+    description: Path (relative to the workspace) to the persisted state JSON.
+    required: false
+    default: data/state.json
+  output-dir:
+    description: Path (relative to the workspace) where the static site is rendered.
+    required: false
+    default: site
+
+runs:
+  using: node20
+  main: dist/index.js
