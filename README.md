@@ -74,16 +74,21 @@ recovery is `git revert`.
 
 ## Pulling in upstream updates
 
-If you want fixes and features from upstream Octoladder:
+GitHub's "Use this template" creates a repository with no shared git
+history with upstream, so `git merge upstream/main` fails with
+"refusing to merge unrelated histories". Cherry-pick individual fixes
+instead:
 
 ```sh
-git remote add upstream https://github.com/tnagatomi/octoladder
+git remote add upstream https://github.com/tnagatomi/octoladder   # one-time
 git fetch upstream
-git merge upstream/main
+git log --oneline main..upstream/main                              # see what's new
+git cherry-pick <sha>                                              # pick the commits you want
+git push
 ```
 
 `data/state.json` is only modified by your sync runs (never upstream),
-so merges typically don't conflict on it.
+so cherry-picks typically don't conflict on it.
 
 ## Local development
 
