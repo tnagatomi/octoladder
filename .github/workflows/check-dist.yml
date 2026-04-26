@@ -1,0 +1,43 @@
+name: Check dist
+
+# Operators consume this repository as a JS action via `uses:
+# tnagatomi/octoladder@<tag>`. GitHub Actions resolves the main: entry
+# from the tag's committed tree, so dist/index.js must stay in lockstep
+# with src/. This workflow rebuilds dist and fails the PR if it differs
+# from what the author committed.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild dist
+        run: npm run build
+
+      - name: Diff
+        run: |
+          if [[ -n "$(git status --porcelain dist/)" ]]; then
+            echo "dist/ is out of sync with src/. Run 'npm run build' and commit." >&2
+            git status --porcelain dist/
+            git --no-pager diff dist/
+            exit 1
+          fi
