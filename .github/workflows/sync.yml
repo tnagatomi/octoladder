@@ -43,6 +43,9 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add data/state.json
             git commit -m "chore: refresh state $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            # Rebase onto any commits that landed between checkout and now,
+            # so a concurrent push to main doesn't reject ours.
+            git pull --rebase origin main
             git push
           fi
 
