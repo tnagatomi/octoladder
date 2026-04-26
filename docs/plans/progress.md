@@ -23,8 +23,8 @@ Dropped from the repo:
 - `Dockerfile`, `.dockerignore`, `.kamal/`, `Procfile.dev`, `Rakefile`
   (re-added later, smaller), `config.ru`, `.gitattributes`, `.env.example`,
   `.rubocop.yml`
-- `.github/workflows/ci.yml` (Rails-specific CI; sync workflow will
-  replace it)
+- `.github/workflows/ci.yml` (Rails-specific CI; sync workflow replaces
+  it)
 
 ### POROs relocated and de-Railsified
 - `app/models/{period,ranking,github_client,teams_config}.rb`
@@ -35,116 +35,125 @@ Dropped from the repo:
 - `GithubClient`: `1.second` → `1` (no ActiveSupport dependency).
 - `Ranking`: unchanged (was already plain Ruby).
 
-### Tooling
-- `Gemfile`: down to `activesupport`, `octokit`, `rake`, `minitest`,
-  `webmock`. No version pins.
-- `Gemfile.lock`: regenerated (25 gems).
-- `.ruby-version`: `4.0.2` → `4.0.3` (matches the locally installed
-  Ruby).
-- `test/test_helper.rb`: plain Minitest setup — loads ActiveSupport,
-  WebMock (net-disabled), the four POROs, and sets `Time.zone` from
-  `OCTOLADDER_TIME_ZONE` (default `Asia/Tokyo`).
-- `Rakefile`: minimal `Rake::TestTask` so `bundle exec rake` runs all
-  tests.
-- All 55 ported tests (105 assertions) pass.
+### Tests
+- Relocated from `test/models/` to `test/octoladder/` to mirror
+  `lib/octoladder/`.
+- New: `config_test.rb`, `state_test.rb`, `sync_test.rb`, `site_test.rb`.
+
+### Runtime config (`OctoladderConfig`)
+- `config/octoladder.yml` exposes only `time_zone` (default
+  `Asia/Tokyo`). `backfill_anchor` is intentionally not configurable —
+  hard-coded at "Jan 1 of the previous calendar year in TZ" to avoid
+  footguns (a multi-year anchor would exhaust GitHub search's 1000-PR
+  cap and rate limits).
+
+### State persistence (`State`)
+- `lib/octoladder/state.rb` — load/save `data/state.json` per the data
+  model in the plan. Deterministic ordering (teams by org+slug, users
+  by github_id, PRs by merged_at+github_id). Absent files load as
+  empty state. Schema-version mismatches raise.
+
+### Sync (`Sync` + `bin/sync`)
+- `lib/octoladder/sync.rb` reconciles team membership, deactivates
+  departed users while preserving historical PRs, and fetches new
+  merged PRs per active user. Fetch window starts one day before each
+  user's latest recorded `merged_at` to absorb mid-window merges; falls
+  back to the backfill anchor on first sync. PRs deduplicated by
+  github_id.
+- `bin/sync` wires `OctoladderConfig.load.apply!` +
+  `TeamsConfig.load` + `State.load` + `GithubClient.from_env`.
+
+### Site (`Site` + `bin/build`)
+- `lib/octoladder/site.rb` enumerates every weekly/monthly/yearly
+  period in `[backfill_anchor, latest closed]` and renders each to
+  `site/<type>/<param>.html`. PR `merged_at` strings parsed once at
+  construction (not per period) and ERB templates compiled-and-cached
+  to keep a 70-period build linear in PR count.
+- `views/{layout,period}.html.erb` + `views/assets/style.css`. Period
+  prev/next links walk only the enumerated set (acceptance criterion
+  #6).
+- `bin/build` wires `OctoladderConfig.load.apply!` + `State.load` +
+  `Site#call`.
+
+### CI / Pages workflows
+- `.github/workflows/sync.yml` — schedule (`0 17 * * 0` = Mon 02:00
+  JST) + `workflow_dispatch`. Steps: checkout, setup-ruby, sync,
+  commit refreshed state, configure-pages, build, upload artifact,
+  deploy. Permissions: `contents: write`, `pages: write`,
+  `id-token: write`. Concurrency group `pages` (no cancel).
+- `.github/workflows/test.yml` — PR + push-to-main test runner.
+- All third-party actions pinned to commit SHA with the tag name in
+  a trailing comment.
+
+### README
+- Operator-facing setup guide (PAT, secret name, teams.yml,
+  enabling private Pages, manual first sync), upstream sync
+  instructions, local development commands, troubleshooting.
 
 ### Naming
-- Renamed everywhere from `octladder` to `octoladder` (extra "o" to
-  match Octocat). Includes `lib/`, test require paths, the
-  `OCTOLADDER_TIME_ZONE` env var, both plan docs, and the comment in
-  `config/teams.yml`.
-- The local repo directory is still `octladder/`; rename externally
-  whenever convenient.
+- Renamed everywhere from `octladder` to `octoladder`.
 
 ## Current repo layout
 
 ```
 .
-├── .github/dependabot.yml
+├── .github/
+│   ├── dependabot.yml
+│   └── workflows/
+│       ├── sync.yml
+│       └── test.yml
 ├── .gitignore
 ├── .ruby-version
 ├── Gemfile
 ├── Gemfile.lock
-├── README.md                       # still the Rails default; rewrite pending
+├── README.md
 ├── Rakefile
+├── bin/
+│   ├── build
+│   └── sync
 ├── config/
+│   ├── octoladder.yml
 │   └── teams.yml
 ├── docs/plans/
 │   ├── initial-plan.md
 │   ├── github-actions-plan.md
 │   └── progress.md                 # this file
 ├── lib/octoladder/
+│   ├── config.rb
 │   ├── github_client.rb
 │   ├── period.rb
 │   ├── ranking.rb
+│   ├── site.rb
+│   ├── state.rb
+│   ├── sync.rb
 │   └── teams_config.rb
-└── test/
-    ├── test_helper.rb
-    └── models/
-        ├── github_client_test.rb
-        ├── period_test.rb
-        ├── ranking_test.rb
-        └── teams_config_test.rb
+├── test/
+│   ├── test_helper.rb
+│   └── octoladder/
+│       ├── config_test.rb
+│       ├── github_client_test.rb
+│       ├── period_test.rb
+│       ├── ranking_test.rb
+│       ├── site_test.rb
+│       ├── state_test.rb
+│       ├── sync_test.rb
+│       └── teams_config_test.rb
+└── views/
+    ├── assets/style.css
+    ├── layout.html.erb
+    └── period.html.erb
 ```
 
 ## Remaining work
 
-Ordered so each step is shippable on its own and unblocks the next.
+The MVP code is complete and all unit tests are green (90 runs, 186
+assertions). What's left is real-world validation, not code:
 
-### 1. Move PORO tests out of `test/models/`
-The `models/` subdirectory is a Rails artifact. Flatten to `test/` (or
-introduce `test/octoladder/` to mirror `lib/octoladder/`). One commit.
-
-### 2. Runtime config
-- `config/octoladder.yml` — `time_zone`, `backfill_anchor` (optional;
-  default = Jan 1 of the previous calendar year).
-- `lib/octoladder/config.rb` — small loader that reads it and applies
-  `Time.zone`.
-
-### 3. State persistence
-- `lib/octoladder/state.rb` — load/save `data/state.json`. Schema per
-  `github-actions-plan.md` ("Data Model" section). Deterministic
-  ordering on save so diffs are reviewable. Treat absent file as empty.
-- Tests for round-trip and ordering.
-
-### 4. Sync
-- `lib/octoladder/sync.rb` — orchestrates `TeamsConfig` + `GithubClient`
-  + `State` per the algorithm in the plan ("Sync Algorithm" section).
-  Reconciles users (`active` flag), fetches PRs from
-  `(latest merged_at − 1 day)` or `backfill_anchor`, dedupes by
-  `github_id`.
-- `bin/sync` — entry point: load config, build client from env, run
-  sync, write state.
-- Tests with WebMock stubs covering: empty state backfill, incremental
-  fetch, user join, user leave, team removal.
-
-### 5. Static site rendering
-- `views/` — ERB layout + one template per period type. CSS only,
-  zero JS. Design reference can be the deleted
-  `app/views/rankings/show.html.erb` if needed (recoverable from git
-  history).
-- `lib/octoladder/site.rb` — enumerate periods within the backfill
-  window, compute `Ranking` per period, render to `site/<type>/<param>.html`.
-  Generate `site/index.html` redirecting to the latest closed weekly
-  period.
-- `bin/build` — entry point.
-- Tests for period enumeration and at least a smoke test of HTML
-  rendering.
-
-### 6. CI / Pages workflow
-- `.github/workflows/sync.yml` — schedule (cron, UTC equivalent of the
-  configured TZ) + `workflow_dispatch`. Steps: checkout (write),
-  setup-ruby, bundle install, `bin/sync`, commit + push state if
-  changed, `bin/build`, `actions/upload-pages-artifact`,
-  `actions/deploy-pages`. Permissions: `contents: write`,
-  `pages: write`, `id-token: write`.
-- A separate `.github/workflows/test.yml` for PRs (run `rake test`).
-
-### 7. README
-Replace the default Rails README with operator-facing setup instructions
-(secret name, enabling private Pages, manual first sync, where to look
-when something goes wrong).
-
-### 8. Local repo directory rename
-External `mv octladder octoladder` once the user is ready. Not blocking
-anything in the repo itself.
+1. **End-to-end run on a real repo.** Configure
+   `OCTOLADDER_GITHUB_TOKEN`, edit `config/teams.yml` for one or more
+   real teams, enable private Pages, trigger the workflow, and verify
+   the published site against the acceptance criteria in
+   `github-actions-plan.md` (especially the "Weekly / Monthly / Yearly
+   ranking … matches what GitHub's own search returns" criteria).
+2. **Local repo directory rename.** External `mv octladder octoladder`.
+   Not blocking anything in-repo.
