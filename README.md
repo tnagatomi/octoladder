@@ -76,19 +76,32 @@ recovery is `git revert`.
 
 GitHub's "Use this template" creates a repository with no shared git
 history with upstream, so `git merge upstream/main` fails with
-"refusing to merge unrelated histories". Cherry-pick individual fixes
-instead:
+"refusing to merge unrelated histories". Two approaches:
+
+**Bulk merge** (preferred when you just want everything upstream has):
 
 ```sh
 git remote add upstream https://github.com/tnagatomi/octoladder   # one-time
 git fetch upstream
-git log --oneline main..upstream/main                              # see what's new
-git cherry-pick <sha>                                              # pick the commits you want
+git merge --allow-unrelated-histories -X theirs upstream/main
+# Restore operator-customized config that -X theirs just overwrote.
+git checkout HEAD^1 -- config/teams.yml
+git add config/teams.yml
+git diff --cached --quiet || git commit --amend --no-edit
 git push
 ```
 
-`data/state.json` is only modified by your sync runs (never upstream),
-so cherry-picks typically don't conflict on it.
+`data/state.json` is only written by your sync runs (never upstream),
+so it's never touched by the merge.
+
+**Cherry-pick** (for picking a single fix without rebasing everything):
+
+```sh
+git fetch upstream
+git log --oneline main..upstream/main           # see what's new
+git cherry-pick <sha>
+git push
+```
 
 ## Local development
 
