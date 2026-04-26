@@ -1,7 +1,0 @@
-octocat_on_platform:
-  team: platform
-  user: octocat
-
-hubot_on_infra:
-  team: infra
-  user: hubot
