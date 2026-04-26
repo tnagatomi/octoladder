@@ -1,0 +1,27 @@
+{
+  "name": "octoladder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Visualize and rank merged-PR contributions across GitHub teams.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit",
+    "build": "ncc build src/index.ts -o dist --license licenses.txt"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@octokit/rest": "^21.0.2",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vercel/ncc": "^0.38.3",
+    "nock": "^14.0.0-beta.19",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -36,3 +36,10 @@
 
 # Generated static site (built by bin/build, deployed to Pages).
 /site/
+
+# Node.
+/node_modules/
+*.tsbuildinfo
+
+# Bundled action artifact (committed only on tagged releases).
+/dist/
