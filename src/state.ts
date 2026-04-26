@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { isoSeconds } from "./util.js";
 
 export const SCHEMA_VERSION = 1;
 
@@ -87,7 +88,7 @@ export class State {
   toJSON(): Record<string, unknown> {
     return {
       schema_version: SCHEMA_VERSION,
-      synced_at: this.syncedAt?.toISOString().replace(/\.\d{3}Z$/, "Z") ?? null,
+      synced_at: this.syncedAt ? isoSeconds(this.syncedAt) : null,
       backfill_anchor: this.backfillAnchor ? formatAnchorDate(this.backfillAnchor) : null,
       teams: [...this.teams].sort((a, b) => compareTuple([a.org, a.slug], [b.org, b.slug])),
       users: [...this.users].sort((a, b) => a.github_id - b.github_id),

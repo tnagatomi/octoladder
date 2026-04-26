@@ -1,4 +1,5 @@
 import { Octokit } from "@octokit/rest";
+import { isoSeconds } from "./util.js";
 
 export interface TeamMember {
   github_id: number;
@@ -98,10 +99,6 @@ interface MergedPrItem {
   html_url: string;
   repository_url: string;
   pull_request: { merged_at: string };
-}
-
-function isoSeconds(date: Date): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 function repoFromUrl(url: string): string {
