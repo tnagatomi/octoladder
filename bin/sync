@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+
+require "octoladder/config"
+require "octoladder/state"
+require "octoladder/teams_config"
+require "octoladder/github_client"
+require "octoladder/sync"
+
+config = OctoladderConfig.load.apply!
+teams_config = TeamsConfig.load
+state_path = File.expand_path("../data/state.json", __dir__)
+state = State.load(state_path)
+client = GithubClient.from_env
+
+Sync.new(
+  state: state,
+  teams_config: teams_config,
+  github_client: client,
+  config: config
+).call
+
+state.save(state_path)
