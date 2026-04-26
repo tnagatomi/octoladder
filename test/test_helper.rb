@@ -5,11 +5,11 @@ require "active_support/test_case"
 require "minitest/autorun"
 require "webmock/minitest"
 
-require "octladder/period"
-require "octladder/ranking"
-require "octladder/github_client"
-require "octladder/teams_config"
+require "octoladder/period"
+require "octoladder/ranking"
+require "octoladder/github_client"
+require "octoladder/teams_config"
 
-Time.zone = ENV.fetch("OCTLADDER_TIME_ZONE", "Asia/Tokyo")
+Time.zone = ENV.fetch("OCTOLADDER_TIME_ZONE", "Asia/Tokyo")
 
 WebMock.disable_net_connect!(allow_localhost: true)

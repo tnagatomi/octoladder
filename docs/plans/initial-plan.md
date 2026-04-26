@@ -1,8 +1,8 @@
-# Octladder — MVP Plan
+# Octoladder — MVP Plan
 
 ## Context
 
-Octladder is a self-hosted full-stack Rails application that visualizes and ranks
+Octoladder is a self-hosted full-stack Rails application that visualizes and ranks
 the OSS contributions (= merged PRs against public repositories) of members of
 one or more GitHub organizations. The use case is making internal OSS
 participation visible inside a company. The distribution model is inspired by
@@ -28,7 +28,7 @@ following the Rails Way.
   with a period navigator (prev / next).
 - Configurable time zone (default `Asia/Tokyo`); all period boundaries and the
   cron schedule honor it.
-- No authentication on the Octladder app itself; deployment on a trusted network
+- No authentication on the Octoladder app itself; deployment on a trusted network
   (VPN / internal) is assumed.
 - Deployment via **Kamal**.
 
@@ -84,7 +84,7 @@ following the Rails Way.
 **Add / remove a team:** edit `config/teams.yml` and redeploy (or just wait for
 the next sync). Additions and removals are both applied; no manual DB work.
 
-**Member turnover:** handled on GitHub (joining / leaving a team). Octladder
+**Member turnover:** handled on GitHub (joining / leaving a team). Octoladder
 reflects it on the next sync. Past PRs of departed members stay in historical
 rankings.
 

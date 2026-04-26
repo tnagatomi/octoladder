@@ -1,4 +1,4 @@
-# Declarative list of GitHub teams whose members Octladder should track.
+# Declarative list of GitHub teams whose members Octoladder should track.
 # Edit this file, commit, and redeploy (or wait for the next sync) to add or
 # remove teams. Both additions and removals are reconciled against the DB on
 # each sync run.

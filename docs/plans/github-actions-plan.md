@@ -1,4 +1,4 @@
-# Octladder — GitHub Actions + Pages MVP Plan
+# Octoladder — GitHub Actions + Pages MVP Plan
 
 ## Context
 
@@ -9,7 +9,7 @@ organizations — but the runtime architecture changes:
 - **No Rails app, no server, no database.** The application becomes a Ruby
   toolchain that runs inside GitHub Actions and publishes a fully static site
   to GitHub Pages.
-- The repository hosting Octladder is itself the deployment target. Operators
+- The repository hosting Octoladder is itself the deployment target. Operators
   fork / clone it, configure it, and let Actions do the rest.
 - The site is published as a **private GitHub Pages site** (Enterprise plan).
   Visibility is controlled by GitHub repo permissions; there is no
@@ -71,7 +71,7 @@ state lives in the repo, not in a database.
    pre-rendered as a static HTML file. Navigation is plain `<a href>`, so the
    site has zero runtime JS requirements.
 9. **GitHub API auth:** a single classic Personal Access Token with `read:org`
-   scope, stored as a repo secret named `OCTLADDER_GITHUB_TOKEN`. The default
+   scope, stored as a repo secret named `OCTOLADDER_GITHUB_TOKEN`. The default
    `GITHUB_TOKEN` cannot read team membership across orgs, so a PAT is
    required.
 10. **Publication:** GitHub Pages, source = GitHub Actions artifact, visibility
@@ -87,7 +87,7 @@ state lives in the repo, not in a database.
 ├── bin/
 │   ├── sync                # Entry point: refresh state.json
 │   └── build               # Entry point: render site/ from state.json
-├── lib/octladder/
+├── lib/octoladder/
 │   ├── period.rb           # ported from app/models/period.rb
 │   ├── ranking.rb          # ported from app/models/ranking.rb
 │   ├── github_client.rb    # ported from app/models/github_client.rb
@@ -98,7 +98,7 @@ state lives in the repo, not in a database.
 ├── views/                  # ERB templates for the site
 ├── config/
 │   ├── teams.yml           # tracked teams (unchanged from initial plan)
-│   └── octladder.yml       # TIME_ZONE, backfill anchor, etc.
+│   └── octoladder.yml       # TIME_ZONE, backfill anchor, etc.
 ├── data/
 │   └── state.json          # canonical persisted state
 ├── site/                   # generated; gitignored
@@ -114,11 +114,11 @@ migration. Rails-specific test helpers are replaced with plain Minitest.
 
 ## Configuration Surface
 
-- `OCTLADDER_GITHUB_TOKEN` — repo secret; classic PAT with `read:org` scope.
+- `OCTOLADDER_GITHUB_TOKEN` — repo secret; classic PAT with `read:org` scope.
 - `config/teams.yml` — declarative list of tracked teams (`org`, `team_slug`).
   Source of truth for membership; reconciled on each sync (additions and
   removals applied).
-- `config/octladder.yml` — non-secret runtime config:
+- `config/octoladder.yml` — non-secret runtime config:
   - `time_zone` (IANA name; default `Asia/Tokyo`)
   - `backfill_anchor` (default: Jan 1 of the previous calendar year, computed
     relative to the first sync date in the configured TZ)
@@ -207,7 +207,7 @@ Steps:
 1. Check out the repo (with write permission).
 2. Set up Ruby (matching `.ruby-version`).
 3. `bundle install` (cached).
-4. `bin/sync` — uses `OCTLADDER_GITHUB_TOKEN`.
+4. `bin/sync` — uses `OCTOLADDER_GITHUB_TOKEN`.
 5. Commit and push `data/state.json` if changed.
 6. `bin/build` — produces `site/`.
 7. `actions/upload-pages-artifact` + `actions/deploy-pages` — publishes
@@ -220,7 +220,7 @@ Permissions: `contents: write` (to commit state), `pages: write`,
 
 **Initial setup:**
 1. Create the repo from this template (or fork).
-2. Add `OCTLADDER_GITHUB_TOKEN` to repo secrets.
+2. Add `OCTOLADDER_GITHUB_TOKEN` to repo secrets.
 3. Edit `config/teams.yml`.
 4. Enable Pages → source: GitHub Actions, visibility: Private.
 5. Trigger `sync.yml` manually for the initial backfill.
@@ -230,7 +230,7 @@ Permissions: `contents: write` (to commit state), `pages: write`,
 applies it. Manual `workflow_dispatch` is available if the operator wants
 immediate effect.
 
-**Member turnover:** handled on GitHub. Octladder reflects it on the next
+**Member turnover:** handled on GitHub. Octoladder reflects it on the next
 sync. Past PRs of departed members stay in historical rankings.
 
 **Recovering from a bad sync:** revert the offending commit on
@@ -242,7 +242,7 @@ is `git revert`.
 The MVP is done when all of the following hold on a fresh repo configured
 against one or more real GitHub teams:
 
-1. **Setup** completes with only: setting `OCTLADDER_GITHUB_TOKEN`, editing
+1. **Setup** completes with only: setting `OCTOLADDER_GITHUB_TOKEN`, editing
    `config/teams.yml`, enabling Pages with private visibility, and running one
    manual sync. No additional manual steps.
 2. **Tracked-user population** equals the union of current members across the
@@ -281,12 +281,12 @@ against one or more real GitHub teams:
 The current repo is a Rails 8 skeleton with the core POROs (`Period`,
 `Ranking`, `GithubClient`, `TeamsConfig`) already implemented. Migration steps:
 
-1. Move the four POROs to `lib/octladder/`, dropping `Rails.root` references
+1. Move the four POROs to `lib/octoladder/`, dropping `Rails.root` references
    (use `__dir__`-relative paths) and replacing `Time.zone` / `Time.current`
    with explicit `ActiveSupport::TimeZone` lookups based on
-   `config/octladder.yml`.
+   `config/octoladder.yml`.
 2. Port the existing model tests to plain Minitest under `test/`.
-3. Implement `lib/octladder/state.rb`, `sync.rb`, `site.rb`, `bin/sync`,
+3. Implement `lib/octoladder/state.rb`, `sync.rb`, `site.rb`, `bin/sync`,
    `bin/build`.
 4. Author `views/` ERB templates (one per period type plus a layout). The
    existing `app/views/` HTML can be used as a starting design reference but
