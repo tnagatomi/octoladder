@@ -155,5 +155,3 @@ assertions). What's left is real-world validation, not code:
    the published site against the acceptance criteria in
    `github-actions-plan.md` (especially the "Weekly / Monthly / Yearly
    ranking … matches what GitHub's own search returns" criteria).
-2. **Local repo directory rename.** External `mv octladder octoladder`.
-   Not blocking anything in-repo.
