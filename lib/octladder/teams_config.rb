@@ -5,7 +5,7 @@ class TeamsConfig
 
   class InvalidConfig < ArgumentError; end
 
-  DEFAULT_PATH = Rails.root.join("config/teams.yml")
+  DEFAULT_PATH = File.expand_path("../../config/teams.yml", __dir__)
 
   def self.load(path = DEFAULT_PATH)
     new(YAML.safe_load_file(path) || [])

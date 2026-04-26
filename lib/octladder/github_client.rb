@@ -28,7 +28,7 @@ class GithubClient
   def merged_prs(login, from:, to:)
     raise InvalidLogin, "invalid GitHub login: #{login.inspect}" unless LOGIN_PATTERN.match?(login)
 
-    range  = "#{from.utc.iso8601}..#{(to.utc - 1.second).iso8601}"
+    range  = "#{from.utc.iso8601}..#{(to.utc - 1).iso8601}"
     result = @client.search_issues("is:pr is:merged is:public author:#{login} merged:#{range}")
 
     if result.total_count > SEARCH_RESULT_CAP

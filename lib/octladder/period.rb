@@ -1,3 +1,5 @@
+require "active_support/all"
+
 class Period
   TYPES = %i[weekly monthly yearly].freeze
 
