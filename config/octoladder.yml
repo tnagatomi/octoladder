@@ -1,0 +1,7 @@
+# Non-secret runtime config for Octoladder.
+#
+# time_zone (optional, default: Asia/Tokyo)
+#   IANA time zone name. All period boundaries (weekly Mon-Sun, monthly,
+#   yearly) and the cron schedule are computed in this zone.
+
+time_zone: Asia/Tokyo
