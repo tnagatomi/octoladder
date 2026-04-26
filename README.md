@@ -20,10 +20,23 @@ Click **Use this template** to create a copy in your own org, then:
 
 1. **Add a Personal Access Token.** A classic PAT with `read:org` scope is
    required because the default `GITHUB_TOKEN` cannot read team membership
-   across orgs. Create one at
+   (no `members:read` permission exists for it). Create one at
    [github.com/settings/tokens](https://github.com/settings/tokens), then
    add it as a repository secret named **`OCTOLADDER_GITHUB_TOKEN`**
    (Settings → Secrets and variables → Actions → New repository secret).
+
+   The PAT is issued under the operator's own GitHub account; admin
+   approval is generally **not** required. Caveats to check before
+   running the first sync:
+
+   - **SAML SSO orgs.** On the PAT page, click `Configure SSO` next to
+     each org and authorize the token. Self-service, no admin needed.
+   - **Secret teams.** The PAT can only read members of teams the
+     operator can already see in the UI. If `config/teams.yml` lists a
+     secret team, the operator must be a member of that team (or an
+     org admin).
+   - **Multi-org setups.** The operator must be a member of every org
+     listed in `config/teams.yml`.
 2. **Edit `config/teams.yml`** to list the GitHub teams whose members you
    want to track. Format:
    ```yaml
