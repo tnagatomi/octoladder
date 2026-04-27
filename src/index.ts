@@ -16,7 +16,8 @@ async function main(): Promise<void> {
   const config = OctoladderConfig.load(configPath);
   const teamsConfig = TeamsConfig.load(teamsPath);
   const state = State.load(statePath);
-  const client = new GithubClient(token);
+  const logger = { warn: (msg: string) => core.warning(msg) };
+  const client = new GithubClient(token, logger);
 
   core.info("Reconciling team membership and fetching merged PRs...");
   await new Sync({
@@ -24,7 +25,7 @@ async function main(): Promise<void> {
     teamsConfig,
     githubClient: client,
     config,
-    logger: { warn: (msg) => core.warning(msg) },
+    logger,
   }).call();
   state.save(statePath);
 

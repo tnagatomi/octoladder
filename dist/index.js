@@ -44650,6 +44650,8 @@ function isoSeconds(date) {
 ;// CONCATENATED MODULE: ./src/github-client.ts
 
 
+
+const NOOP_LOGGER = { warn: () => { } };
 class GithubClientError extends Error {
     constructor(message) {
         super(message);
@@ -44664,16 +44666,42 @@ class ResultsTruncated extends GithubClientError {
 }
 const LOGIN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/;
 const SEARCH_RESULT_CAP = 1000;
+const RATE_LIMIT_HEADERS = [
+    "x-ratelimit-resource",
+    "x-ratelimit-remaining",
+    "x-ratelimit-limit",
+    "x-ratelimit-reset",
+    "x-ratelimit-used",
+    "retry-after",
+];
 class GithubClient {
     octokit;
-    static fromEnv() {
+    logger;
+    static fromEnv(logger) {
         const token = (process.env["GITHUB_TOKEN"] ?? "").trim();
         if (token.length === 0)
             throw new MissingToken("GITHUB_TOKEN is not set");
-        return new GithubClient(token);
+        return new GithubClient(token, logger);
     }
-    constructor(token) {
+    constructor(token, logger) {
         this.octokit = new dist_src_Octokit({ auth: token });
+        this.logger = logger ?? NOOP_LOGGER;
+        this.installRateLimitHook();
+    }
+    installRateLimitHook() {
+        this.octokit.hook.error("request", (error, options) => {
+            if (error instanceof RequestError && (error.status === 403 || error.status === 429)) {
+                const headers = error.response?.headers ?? {};
+                const summary = RATE_LIMIT_HEADERS
+                    .filter((name) => headers[name] !== undefined)
+                    .map((name) => `${name}=${headers[name]}`)
+                    .join(" ");
+                if (summary.length > 0) {
+                    this.logger.warn(`GitHub ${error.status} on ${options.method} ${options.url}: ${summary}`);
+                }
+            }
+            throw error;
+        });
     }
     async teamMembers(org, slug) {
         const members = await this.octokit.paginate("GET /orgs/{org}/teams/{team_slug}/members", { org, team_slug: slug, per_page: 100 });
@@ -45546,7 +45574,6 @@ function formatAnchorDate(date) {
 
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const NOOP_LOGGER = { warn: () => { } };
 class Sync {
     state;
     teamsConfig;
@@ -45744,14 +45771,15 @@ async function main() {
     const config = OctoladderConfig.load(configPath);
     const teamsConfig = TeamsConfig.load(teamsPath);
     const state = State.load(statePath);
-    const client = new GithubClient(token);
+    const logger = { warn: (msg) => core.warning(msg) };
+    const client = new GithubClient(token, logger);
     core.info("Reconciling team membership and fetching merged PRs...");
     await new Sync({
         state,
         teamsConfig,
         githubClient: client,
         config,
-        logger: { warn: (msg) => core.warning(msg) },
+        logger,
     }).call();
     state.save(statePath);
     core.info(`Rendering site to ${outputDir}/`);

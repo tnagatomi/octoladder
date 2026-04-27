@@ -1,4 +1,5 @@
 import { Octokit } from "@octokit/rest";
+import { RequestError } from "@octokit/request-error";
 import { isoSeconds } from "./util.js";
 
 export interface TeamMember {
@@ -14,6 +15,12 @@ export interface MergedPr {
   repo_full_name: string;
 }
 
+export interface Logger {
+  warn(message: string): void;
+}
+
+export const NOOP_LOGGER: Logger = { warn: () => {} };
+
 class GithubClientError extends Error {
   constructor(message: string) {
     super(message);
@@ -27,18 +34,47 @@ export class ResultsTruncated extends GithubClientError {}
 
 const LOGIN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/;
 const SEARCH_RESULT_CAP = 1000;
+const RATE_LIMIT_HEADERS = [
+  "x-ratelimit-resource",
+  "x-ratelimit-remaining",
+  "x-ratelimit-limit",
+  "x-ratelimit-reset",
+  "x-ratelimit-used",
+  "retry-after",
+] as const;
 
 export class GithubClient {
   private readonly octokit: Octokit;
+  private readonly logger: Logger;
 
-  static fromEnv(): GithubClient {
+  static fromEnv(logger?: Logger): GithubClient {
     const token = (process.env["GITHUB_TOKEN"] ?? "").trim();
     if (token.length === 0) throw new MissingToken("GITHUB_TOKEN is not set");
-    return new GithubClient(token);
+    return new GithubClient(token, logger);
   }
 
-  constructor(token: string) {
+  constructor(token: string, logger?: Logger) {
     this.octokit = new Octokit({ auth: token });
+    this.logger = logger ?? NOOP_LOGGER;
+    this.installRateLimitHook();
+  }
+
+  private installRateLimitHook(): void {
+    this.octokit.hook.error("request", (error, options) => {
+      if (error instanceof RequestError && (error.status === 403 || error.status === 429)) {
+        const headers = error.response?.headers ?? {};
+        const summary = RATE_LIMIT_HEADERS
+          .filter((name) => headers[name] !== undefined)
+          .map((name) => `${name}=${headers[name]}`)
+          .join(" ");
+        if (summary.length > 0) {
+          this.logger.warn(
+            `GitHub ${error.status} on ${options.method} ${options.url}: ${summary}`,
+          );
+        }
+      }
+      throw error;
+    });
   }
 
   async teamMembers(org: string, slug: string): Promise<TeamMember[]> {

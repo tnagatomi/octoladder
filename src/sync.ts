@@ -1,5 +1,5 @@
 import type { OctoladderConfig } from "./config.js";
-import { ResultsTruncated, type GithubClient } from "./github-client.js";
+import { NOOP_LOGGER, ResultsTruncated, type GithubClient, type Logger } from "./github-client.js";
 import type { State, StatePullRequest, StateUser } from "./state.js";
 import type { TeamsConfig } from "./teams-config.js";
 import { isoSeconds } from "./util.js";
@@ -12,11 +12,7 @@ interface MembershipBucket {
   team_keys: string[];
 }
 
-export interface Logger {
-  warn(message: string): void;
-}
-
-const NOOP_LOGGER: Logger = { warn: () => {} };
+export type { Logger } from "./github-client.js";
 
 export class Sync {
   private readonly state: State;

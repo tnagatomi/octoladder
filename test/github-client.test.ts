@@ -217,3 +217,55 @@ describe("GithubClient.mergedPrs", () => {
     expect(nock.isDone()).toBe(true);
   });
 });
+
+describe("GithubClient rate-limit logging", () => {
+  it("logs rate-limit response headers on 403", async () => {
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query(true)
+      .reply(
+        403,
+        { message: "API rate limit exceeded" },
+        {
+          "x-ratelimit-resource": "search",
+          "x-ratelimit-remaining": "0",
+          "x-ratelimit-limit": "30",
+          "x-ratelimit-reset": "1700000000",
+          "retry-after": "42",
+        },
+      );
+
+    const warnings: string[] = [];
+    const client = new GithubClient("test-token", { warn: (msg) => warnings.push(msg) });
+    await client
+      .mergedPrs("octocat", {
+        from: new Date("2026-01-01T00:00:00Z"),
+        to: new Date("2026-02-01T00:00:00Z"),
+        minStars: 20,
+      })
+      .catch(() => undefined);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/x-ratelimit-resource=search/);
+    expect(warnings[0]).toMatch(/x-ratelimit-remaining=0/);
+    expect(warnings[0]).toMatch(/retry-after=42/);
+  });
+
+  it("does not log on non-rate-limit failures", async () => {
+    nock("https://api.github.com").get(/.*/).reply(500, { message: "boom" });
+
+    const warnings: string[] = [];
+    const client = new GithubClient("test-token", { warn: (msg) => warnings.push(msg) });
+    await client.teamMembers("acme", "platform").catch(() => undefined);
+    expect(warnings).toEqual([]);
+  });
+
+  it("does not log on rate-limit responses without rate-limit headers", async () => {
+    nock("https://api.github.com").get(/.*/).reply(403, { message: "forbidden" });
+
+    const warnings: string[] = [];
+    const client = new GithubClient("test-token", { warn: (msg) => warnings.push(msg) });
+    await client.teamMembers("acme", "platform").catch(() => undefined);
+    expect(warnings).toEqual([]);
+  });
+});
