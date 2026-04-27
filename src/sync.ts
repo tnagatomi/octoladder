@@ -97,7 +97,11 @@ export class Sync {
     for (const user of this.state.users) {
       if (!user.active) continue;
       const from = this.fetchWindowStart(latestByLogin.get(user.login));
-      const prs = await this.client.mergedPrs(user.login, { from, to: this.now });
+      const prs = await this.client.mergedPrs(user.login, {
+        from,
+        to: this.now,
+        minStars: this.config.minStars,
+      });
       for (const pr of prs) {
         if (seenIds.has(pr.github_id)) continue;
         const record: StatePullRequest = {

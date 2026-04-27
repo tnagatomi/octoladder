@@ -151,9 +151,12 @@ Dependabot will open PRs whenever `tnagatomi/octoladder` (or the other pinned ac
 
 ```yaml
 time_zone: Asia/Tokyo   # IANA name; default: Asia/Tokyo
+min_stars: 20           # repo star floor; default: 20
 ```
 
 If you change the time zone, also adjust the cron expression in your workflow so the schedule fires on Monday morning local time (Actions cron is UTC-only).
+
+`min_stars` filters merged PRs by the star count of the repository they were merged into (applied as the `stars:>=N` qualifier on GitHub PR search). Set to `0` to disable the floor and count every public merged PR.
 
 ## Operating
 

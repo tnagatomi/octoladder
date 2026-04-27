@@ -14,6 +14,7 @@ describe("OctoladderConfig", () => {
   it("defaults when given an empty object", () => {
     const config = new OctoladderConfig({});
     expect(config.timeZone).toBe("Asia/Tokyo");
+    expect(config.minStars).toBe(20);
   });
 
   it("honors explicit time_zone", () => {
@@ -21,8 +22,19 @@ describe("OctoladderConfig", () => {
     expect(config.timeZone).toBe("America/Los_Angeles");
   });
 
+  it("honors explicit min_stars", () => {
+    const config = new OctoladderConfig({ min_stars: 0 });
+    expect(config.minStars).toBe(0);
+  });
+
   it("rejects unknown time_zone", () => {
     expect(() => new OctoladderConfig({ time_zone: "Mars/Olympus" })).toThrow(InvalidConfig);
+  });
+
+  it("rejects non-integer min_stars", () => {
+    expect(() => new OctoladderConfig({ min_stars: 1.5 })).toThrow(InvalidConfig);
+    expect(() => new OctoladderConfig({ min_stars: "20" })).toThrow(InvalidConfig);
+    expect(() => new OctoladderConfig({ min_stars: -1 })).toThrow(InvalidConfig);
   });
 
   it("rejects non-mapping input", () => {
@@ -54,6 +66,13 @@ describe("OctoladderConfig", () => {
     writeFileSync(path, "time_zone: Europe/Berlin\n");
     const config = OctoladderConfig.load(path);
     expect(config.timeZone).toBe("Europe/Berlin");
+  });
+
+  it("load reads min_stars from disk", () => {
+    const path = join(dir, "octoladder.yml");
+    writeFileSync(path, "min_stars: 100\n");
+    const config = OctoladderConfig.load(path);
+    expect(config.minStars).toBe(100);
   });
 
   it("load treats an empty file as defaults", () => {
