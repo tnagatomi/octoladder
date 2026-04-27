@@ -1,9 +1,9 @@
 import nock from "nock";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { OctoladderConfig } from "../src/config.js";
 import { GithubClient } from "../src/github-client.js";
 import { State } from "../src/state.js";
-import { Sync } from "../src/sync.js";
+import { Sync, type Logger } from "../src/sync.js";
 import { TeamsConfig } from "../src/teams-config.js";
 import { makePullRequest, makeUser } from "./helpers.js";
 
@@ -13,13 +13,19 @@ afterAll(() => nock.enableNetConnect());
 
 const NOW = new Date("2026-04-27T17:00:00Z");
 
-function makeSync(state: State, teamsConfig?: TeamsConfig, config?: OctoladderConfig): Sync {
+function makeSync(
+  state: State,
+  teamsConfig?: TeamsConfig,
+  config?: OctoladderConfig,
+  logger?: Logger,
+): Sync {
   return new Sync({
     state,
     teamsConfig: teamsConfig ?? defaultTeamsConfig(),
     githubClient: new GithubClient("test-token"),
     config: config ?? new OctoladderConfig({ time_zone: "Asia/Tokyo" }),
     now: NOW,
+    logger,
   });
 }
 
@@ -191,6 +197,42 @@ describe("Sync", () => {
     await makeSync(state, undefined, config).call();
 
     expect(nock.isDone()).toBe(true);
+  });
+
+  it("user exceeding the search cap is skipped with a warning, others still processed", async () => {
+    stubMembers("acme", "platform", [
+      { id: 1, login: "alice", avatar_url: "x" },
+      { id: 2, login: "bob", avatar_url: "y" },
+    ]);
+    stubMembers("acme", "infra", []);
+    stubSearch("alice", [], 1234);
+    stubSearch("bob", [prItem(200, "acme/widget", "2026-04-20T09:00:00Z")]);
+
+    const warn = vi.fn();
+    const state = new State();
+    await makeSync(state, undefined, undefined, { warn }).call();
+
+    expect(state.pullRequests).toHaveLength(1);
+    expect(state.pullRequests[0]!.author_login).toBe("bob");
+    expect(state.syncedAt).toEqual(NOW);
+    expect(state.backfillAnchor).toEqual(new Date("2025-01-01T00:00:00Z"));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toMatch(/^Skipping alice: /);
+    expect(warn.mock.calls[0]![0]).toContain("1234");
+  });
+
+  it("non-truncation errors propagate and abort the sync", async () => {
+    stubMembers("acme", "platform", [{ id: 1, login: "alice", avatar_url: "x" }]);
+    stubMembers("acme", "infra", []);
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query(true)
+      .reply(500, { message: "boom" });
+
+    const warn = vi.fn();
+    const state = new State();
+    await expect(makeSync(state, undefined, undefined, { warn }).call()).rejects.toThrow();
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("PRs returned again on subsequent sync are deduped by github_id", async () => {

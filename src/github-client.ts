@@ -76,7 +76,7 @@ export class GithubClient {
 
     if (peek.data.total_count > SEARCH_RESULT_CAP) {
       throw new ResultsTruncated(
-        `GitHub search returned ${peek.data.total_count} results for ${login}, exceeding the ${SEARCH_RESULT_CAP}-result cap`,
+        `GitHub search returned ${peek.data.total_count} results, exceeding the ${SEARCH_RESULT_CAP}-result cap`,
       );
     }
 

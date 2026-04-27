@@ -19,7 +19,13 @@ async function main(): Promise<void> {
   const client = new GithubClient(token);
 
   core.info("Reconciling team membership and fetching merged PRs...");
-  await new Sync({ state, teamsConfig, githubClient: client, config }).call();
+  await new Sync({
+    state,
+    teamsConfig,
+    githubClient: client,
+    config,
+    logger: { warn: (msg) => core.warning(msg) },
+  }).call();
   state.save(statePath);
 
   core.info(`Rendering site to ${outputDir}/`);

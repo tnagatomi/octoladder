@@ -44700,7 +44700,7 @@ class GithubClient {
             advanced_search: "true",
         });
         if (peek.data.total_count > SEARCH_RESULT_CAP) {
-            throw new ResultsTruncated(`GitHub search returned ${peek.data.total_count} results for ${login}, exceeding the ${SEARCH_RESULT_CAP}-result cap`);
+            throw new ResultsTruncated(`GitHub search returned ${peek.data.total_count} results, exceeding the ${SEARCH_RESULT_CAP}-result cap`);
         }
         const items = peek.data.total_count > peek.data.items.length
             ? (await this.octokit.paginate("GET /search/issues", {
@@ -45544,19 +45544,23 @@ function formatAnchorDate(date) {
 
 ;// CONCATENATED MODULE: ./src/sync.ts
 
+
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const NOOP_LOGGER = { warn: () => { } };
 class Sync {
     state;
     teamsConfig;
     client;
     config;
     now;
+    logger;
     constructor(opts) {
         this.state = opts.state;
         this.teamsConfig = opts.teamsConfig;
         this.client = opts.githubClient;
         this.config = opts.config;
         this.now = opts.now ?? new Date();
+        this.logger = opts.logger ?? NOOP_LOGGER;
     }
     async call() {
         this.reconcileTeams();
@@ -45618,11 +45622,21 @@ class Sync {
             if (!user.active)
                 continue;
             const from = this.fetchWindowStart(latestByLogin.get(user.login));
-            const prs = await this.client.mergedPrs(user.login, {
-                from,
-                to: this.now,
-                minStars: this.config.minStars,
-            });
+            let prs;
+            try {
+                prs = await this.client.mergedPrs(user.login, {
+                    from,
+                    to: this.now,
+                    minStars: this.config.minStars,
+                });
+            }
+            catch (err) {
+                if (err instanceof ResultsTruncated) {
+                    this.logger.warn(`Skipping ${user.login}: ${err.message}`);
+                    continue;
+                }
+                throw err;
+            }
             for (const pr of prs) {
                 if (seenIds.has(pr.github_id))
                     continue;
@@ -45732,7 +45746,13 @@ async function main() {
     const state = State.load(statePath);
     const client = new GithubClient(token);
     core.info("Reconciling team membership and fetching merged PRs...");
-    await new Sync({ state, teamsConfig, githubClient: client, config }).call();
+    await new Sync({
+        state,
+        teamsConfig,
+        githubClient: client,
+        config,
+        logger: { warn: (msg) => core.warning(msg) },
+    }).call();
     state.save(statePath);
     core.info(`Rendering site to ${outputDir}/`);
     new Site({ state, outputDir, timeZone: config.timeZone }).call();

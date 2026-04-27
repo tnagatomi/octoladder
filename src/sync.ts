@@ -1,5 +1,5 @@
 import type { OctoladderConfig } from "./config.js";
-import type { GithubClient } from "./github-client.js";
+import { ResultsTruncated, type GithubClient } from "./github-client.js";
 import type { State, StatePullRequest, StateUser } from "./state.js";
 import type { TeamsConfig } from "./teams-config.js";
 import { isoSeconds } from "./util.js";
@@ -12,12 +12,19 @@ interface MembershipBucket {
   team_keys: string[];
 }
 
+export interface Logger {
+  warn(message: string): void;
+}
+
+const NOOP_LOGGER: Logger = { warn: () => {} };
+
 export class Sync {
   private readonly state: State;
   private readonly teamsConfig: TeamsConfig;
   private readonly client: GithubClient;
   private readonly config: OctoladderConfig;
   private readonly now: Date;
+  private readonly logger: Logger;
 
   constructor(opts: {
     state: State;
@@ -25,12 +32,14 @@ export class Sync {
     githubClient: GithubClient;
     config: OctoladderConfig;
     now?: Date;
+    logger?: Logger;
   }) {
     this.state = opts.state;
     this.teamsConfig = opts.teamsConfig;
     this.client = opts.githubClient;
     this.config = opts.config;
     this.now = opts.now ?? new Date();
+    this.logger = opts.logger ?? NOOP_LOGGER;
   }
 
   async call(): Promise<State> {
@@ -97,11 +106,20 @@ export class Sync {
     for (const user of this.state.users) {
       if (!user.active) continue;
       const from = this.fetchWindowStart(latestByLogin.get(user.login));
-      const prs = await this.client.mergedPrs(user.login, {
-        from,
-        to: this.now,
-        minStars: this.config.minStars,
-      });
+      let prs;
+      try {
+        prs = await this.client.mergedPrs(user.login, {
+          from,
+          to: this.now,
+          minStars: this.config.minStars,
+        });
+      } catch (err) {
+        if (err instanceof ResultsTruncated) {
+          this.logger.warn(`Skipping ${user.login}: ${err.message}`);
+          continue;
+        }
+        throw err;
+      }
       for (const pr of prs) {
         if (seenIds.has(pr.github_id)) continue;
         const record: StatePullRequest = {
