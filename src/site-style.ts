@@ -50,7 +50,6 @@ h1 { margin: 0.25rem 0 0.5rem; font-size: 1.5rem; }
 
 .period-nav a { color: var(--accent); text-decoration: none; }
 .period-nav a:hover { text-decoration: underline; }
-.period-nav .disabled { color: var(--border); }
 
 table.ranking {
   width: 100%;
