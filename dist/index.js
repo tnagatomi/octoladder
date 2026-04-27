@@ -40597,8 +40597,10 @@ class InvalidConfig extends Error {
     }
 }
 const DEFAULT_TIME_ZONE = "Asia/Tokyo";
+const DEFAULT_MIN_STARS = 20;
 class OctoladderConfig {
     timeZone;
+    minStars;
     constructor(raw) {
         if (!isPlainObject(raw)) {
             throw new InvalidConfig(`expected a mapping, got ${describe(raw)}`);
@@ -40608,6 +40610,11 @@ class OctoladderConfig {
             throw new InvalidConfig(`unknown time_zone: ${JSON.stringify(tz)}`);
         }
         this.timeZone = tz;
+        const minStars = raw["min_stars"] ?? DEFAULT_MIN_STARS;
+        if (typeof minStars !== "number" || !Number.isInteger(minStars) || minStars < 0) {
+            throw new InvalidConfig(`min_stars must be a non-negative integer, got ${JSON.stringify(minStars)}`);
+        }
+        this.minStars = minStars;
     }
     static load(path) {
         if (!(0,external_node_fs_namespaceObject.existsSync)(path))
@@ -44683,7 +44690,8 @@ class GithubClient {
         }
         const fromIso = isoSeconds(opts.from);
         const toIso = isoSeconds(new Date(opts.to.getTime() - 1000));
-        const q = `is:pr is:merged is:public author:${login} merged:${fromIso}..${toIso}`;
+        const stars = opts.minStars > 0 ? ` stars:>=${opts.minStars}` : "";
+        const q = `is:pr is:merged is:public author:${login} merged:${fromIso}..${toIso}${stars}`;
         // Peek the first page to see total_count cheaply; bail if it exceeds the
         // 1000-result search cap before triggering follow-up page fetches.
         const peek = await this.octokit.request("GET /search/issues", {
@@ -45590,7 +45598,11 @@ class Sync {
             if (!user.active)
                 continue;
             const from = this.fetchWindowStart(latestByLogin.get(user.login));
-            const prs = await this.client.mergedPrs(user.login, { from, to: this.now });
+            const prs = await this.client.mergedPrs(user.login, {
+                from,
+                to: this.now,
+                minStars: this.config.minStars,
+            });
             for (const pr of prs) {
                 if (seenIds.has(pr.github_id))
                     continue;

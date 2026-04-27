@@ -13,12 +13,12 @@ afterAll(() => nock.enableNetConnect());
 
 const NOW = new Date("2026-04-27T17:00:00Z");
 
-function makeSync(state: State, teamsConfig?: TeamsConfig): Sync {
+function makeSync(state: State, teamsConfig?: TeamsConfig, config?: OctoladderConfig): Sync {
   return new Sync({
     state,
     teamsConfig: teamsConfig ?? defaultTeamsConfig(),
     githubClient: new GithubClient("test-token"),
-    config: new OctoladderConfig({ time_zone: "Asia/Tokyo" }),
+    config: config ?? new OctoladderConfig({ time_zone: "Asia/Tokyo" }),
     now: NOW,
   });
 }
@@ -175,6 +175,22 @@ describe("Sync", () => {
     await makeSync(state).call();
 
     expect(state.users[0]!.team_keys).toEqual(["acme/infra", "acme/platform"]);
+  });
+
+  it("forwards configured min_stars to the search query", async () => {
+    stubMembers("acme", "platform", [{ id: 1, login: "alice", avatar_url: "x" }]);
+    stubMembers("acme", "infra", []);
+
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query((q) => typeof q["q"] === "string" && q["q"].includes("stars:>=50"))
+      .reply(200, { total_count: 0, items: [] });
+
+    const state = new State();
+    const config = new OctoladderConfig({ time_zone: "Asia/Tokyo", min_stars: 50 });
+    await makeSync(state, undefined, config).call();
+
+    expect(nock.isDone()).toBe(true);
   });
 
   it("PRs returned again on subsequent sync are deduped by github_id", async () => {

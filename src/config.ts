@@ -10,9 +10,11 @@ export class InvalidConfig extends Error {
 }
 
 export const DEFAULT_TIME_ZONE = "Asia/Tokyo";
+export const DEFAULT_MIN_STARS = 20;
 
 export class OctoladderConfig {
   readonly timeZone: string;
+  readonly minStars: number;
 
   constructor(raw: unknown) {
     if (!isPlainObject(raw)) {
@@ -23,6 +25,14 @@ export class OctoladderConfig {
       throw new InvalidConfig(`unknown time_zone: ${JSON.stringify(tz)}`);
     }
     this.timeZone = tz;
+
+    const minStars = raw["min_stars"] ?? DEFAULT_MIN_STARS;
+    if (typeof minStars !== "number" || !Number.isInteger(minStars) || minStars < 0) {
+      throw new InvalidConfig(
+        `min_stars must be a non-negative integer, got ${JSON.stringify(minStars)}`,
+      );
+    }
+    this.minStars = minStars;
   }
 
   static load(path: string): OctoladderConfig {

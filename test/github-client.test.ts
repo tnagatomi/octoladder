@@ -84,7 +84,7 @@ describe("GithubClient.teamMembers", () => {
 describe("GithubClient.mergedPrs", () => {
   it("builds a half-open search range and normalizes results", async () => {
     const expectedQ =
-      "is:pr is:merged is:public author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z";
+      "is:pr is:merged is:public author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z stars:>=20";
 
     nock("https://api.github.com")
       .get("/search/issues")
@@ -105,6 +105,7 @@ describe("GithubClient.mergedPrs", () => {
     const prs = await client.mergedPrs("octocat", {
       from: new Date("2026-04-06T00:00:00Z"),
       to: new Date("2026-04-13T00:00:00Z"),
+      minStars: 20,
     });
     expect(prs).toHaveLength(1);
     expect(prs[0]).toEqual({
@@ -113,6 +114,42 @@ describe("GithubClient.mergedPrs", () => {
       html_url: "https://github.com/acme/widget/pull/12",
       repo_full_name: "acme/widget",
     });
+  });
+
+  it("forwards a custom minStars to the search query", async () => {
+    const expectedQ =
+      "is:pr is:merged is:public author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z stars:>=100";
+
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query((q) => q["q"] === expectedQ)
+      .reply(200, { total_count: 0, items: [] });
+
+    const client = new GithubClient("test-token");
+    await client.mergedPrs("octocat", {
+      from: new Date("2026-04-06T00:00:00Z"),
+      to: new Date("2026-04-13T00:00:00Z"),
+      minStars: 100,
+    });
+    expect(nock.isDone()).toBe(true);
+  });
+
+  it("omits the stars qualifier when minStars is 0", async () => {
+    const expectedQ =
+      "is:pr is:merged is:public author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z";
+
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query((q) => q["q"] === expectedQ)
+      .reply(200, { total_count: 0, items: [] });
+
+    const client = new GithubClient("test-token");
+    await client.mergedPrs("octocat", {
+      from: new Date("2026-04-06T00:00:00Z"),
+      to: new Date("2026-04-13T00:00:00Z"),
+      minStars: 0,
+    });
+    expect(nock.isDone()).toBe(true);
   });
 
   it("returns an empty list when search has no hits", async () => {
@@ -125,6 +162,7 @@ describe("GithubClient.mergedPrs", () => {
     const prs = await client.mergedPrs("octocat", {
       from: new Date("2026-01-01T00:00:00Z"),
       to: new Date("2026-02-01T00:00:00Z"),
+      minStars: 20,
     });
     expect(prs).toEqual([]);
   });
@@ -136,6 +174,7 @@ describe("GithubClient.mergedPrs", () => {
         client.mergedPrs(bad, {
           from: new Date("2026-01-01T00:00:00Z"),
           to: new Date("2026-02-01T00:00:00Z"),
+          minStars: 20,
         }),
       ).rejects.toThrow(InvalidLogin);
     }
@@ -153,6 +192,7 @@ describe("GithubClient.mergedPrs", () => {
       .mergedPrs("octocat", {
         from: new Date("2026-01-01T00:00:00Z"),
         to: new Date("2027-01-01T00:00:00Z"),
+        minStars: 20,
       })
       .then(() => null)
       .catch((e) => e);
@@ -172,6 +212,7 @@ describe("GithubClient.mergedPrs", () => {
     await client.mergedPrs("octocat", {
       from: new Date("2026-01-01T00:00:00Z"),
       to: new Date("2026-02-01T00:00:00Z"),
+      minStars: 20,
     });
     expect(nock.isDone()).toBe(true);
   });

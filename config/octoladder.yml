@@ -3,5 +3,10 @@
 # time_zone (optional, default: Asia/Tokyo)
 #   IANA time zone name. All period boundaries (weekly Mon-Sun, monthly,
 #   yearly) and the cron schedule are computed in this zone.
+#
+# min_stars (optional, default: 20)
+#   Minimum star count of the target repository for a merged PR to be
+#   counted. Applied as the `stars:>=N` qualifier on GitHub PR search.
 
 time_zone: Asia/Tokyo
+min_stars: 20

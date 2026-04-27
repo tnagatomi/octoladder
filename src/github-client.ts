@@ -54,13 +54,17 @@ export class GithubClient {
   }
 
   // from is inclusive, to is exclusive (matches Period's half-open interval).
-  async mergedPrs(login: string, opts: { from: Date; to: Date }): Promise<MergedPr[]> {
+  async mergedPrs(
+    login: string,
+    opts: { from: Date; to: Date; minStars: number },
+  ): Promise<MergedPr[]> {
     if (!LOGIN_PATTERN.test(login)) {
       throw new InvalidLogin(`invalid GitHub login: ${JSON.stringify(login)}`);
     }
     const fromIso = isoSeconds(opts.from);
     const toIso = isoSeconds(new Date(opts.to.getTime() - 1000));
-    const q = `is:pr is:merged is:public author:${login} merged:${fromIso}..${toIso}`;
+    const stars = opts.minStars > 0 ? ` stars:>=${opts.minStars}` : "";
+    const q = `is:pr is:merged is:public author:${login} merged:${fromIso}..${toIso}${stars}`;
 
     // Peek the first page to see total_count cheaply; bail if it exceeds the
     // 1000-result search cap before triggering follow-up page fetches.
