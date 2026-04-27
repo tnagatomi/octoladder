@@ -1,6 +1,13 @@
 import nock from "nock";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { GithubClient, InvalidLogin, MissingToken, ResultsTruncated } from "../src/github-client.js";
+import {
+  GithubClient,
+  InvalidLogin,
+  MissingToken,
+  rateLimitRetryHandler,
+  ResultsTruncated,
+} from "../src/github-client.js";
+import { makeClient } from "./helpers.js";
 
 beforeAll(() => {
   nock.disableNetConnect();
@@ -42,7 +49,7 @@ describe("GithubClient.teamMembers", () => {
         { id: 101, login: "hubot", avatar_url: "https://example.com/h.png" },
       ]);
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     const members = await client.teamMembers("acme", "platform");
     expect(members).toEqual([
       { github_id: 42, login: "octocat", avatar_url: "https://example.com/a.png" },
@@ -61,21 +68,21 @@ describe("GithubClient.teamMembers", () => {
       .query({ page: "2", per_page: "100" })
       .reply(200, [{ id: 2, login: "b", avatar_url: "y" }]);
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     const members = await client.teamMembers("acme", "platform");
     expect(members.map((m) => m.login)).toEqual(["a", "b"]);
   });
 
   it("propagates 401 errors", async () => {
     nock("https://api.github.com").get(/.*/).reply(401, {});
-    const client = new GithubClient("bad-token");
+    const client = makeClient("bad-token");
     const error = await client.teamMembers("acme", "platform").catch((e) => e);
     expect(error).toMatchObject({ status: 401 });
   });
 
   it("propagates 404 errors", async () => {
     nock("https://api.github.com").get(/.*/).reply(404, {});
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     const error = await client.teamMembers("acme", "missing").catch((e) => e);
     expect(error).toMatchObject({ status: 404 });
   });
@@ -101,7 +108,7 @@ describe("GithubClient.mergedPrs", () => {
         ],
       });
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     const prs = await client.mergedPrs("octocat", {
       from: new Date("2026-04-06T00:00:00Z"),
       to: new Date("2026-04-13T00:00:00Z"),
@@ -125,7 +132,7 @@ describe("GithubClient.mergedPrs", () => {
       .query((q) => q["q"] === expectedQ)
       .reply(200, { total_count: 0, items: [] });
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     await client.mergedPrs("octocat", {
       from: new Date("2026-04-06T00:00:00Z"),
       to: new Date("2026-04-13T00:00:00Z"),
@@ -143,7 +150,7 @@ describe("GithubClient.mergedPrs", () => {
       .query((q) => q["q"] === expectedQ)
       .reply(200, { total_count: 0, items: [] });
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     await client.mergedPrs("octocat", {
       from: new Date("2026-04-06T00:00:00Z"),
       to: new Date("2026-04-13T00:00:00Z"),
@@ -158,7 +165,7 @@ describe("GithubClient.mergedPrs", () => {
       .query(true)
       .reply(200, { total_count: 0, items: [] });
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     const prs = await client.mergedPrs("octocat", {
       from: new Date("2026-01-01T00:00:00Z"),
       to: new Date("2026-02-01T00:00:00Z"),
@@ -168,7 +175,7 @@ describe("GithubClient.mergedPrs", () => {
   });
 
   it("rejects logins that GitHub would never issue", async () => {
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     for (const bad of ["", "bad login", "foo OR is:public", "-leading-hyphen", "a".repeat(40)]) {
       await expect(
         client.mergedPrs(bad, {
@@ -187,7 +194,7 @@ describe("GithubClient.mergedPrs", () => {
       .query(true)
       .reply(200, { total_count: 1001, items: [] });
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     const error = await client
       .mergedPrs("octocat", {
         from: new Date("2026-01-01T00:00:00Z"),
@@ -208,7 +215,7 @@ describe("GithubClient.mergedPrs", () => {
       .query(true)
       .reply(200, { total_count: 0, items: [] });
 
-    const client = new GithubClient("test-token");
+    const client = makeClient();
     await client.mergedPrs("octocat", {
       from: new Date("2026-01-01T00:00:00Z"),
       to: new Date("2026-02-01T00:00:00Z"),
@@ -236,7 +243,7 @@ describe("GithubClient rate-limit logging", () => {
       );
 
     const warnings: string[] = [];
-    const client = new GithubClient("test-token", { warn: (msg) => warnings.push(msg) });
+    const client = makeClient("test-token", { warn: (msg) => warnings.push(msg) });
     await client
       .mergedPrs("octocat", {
         from: new Date("2026-01-01T00:00:00Z"),
@@ -255,7 +262,7 @@ describe("GithubClient rate-limit logging", () => {
     nock("https://api.github.com").get(/.*/).reply(500, { message: "boom" });
 
     const warnings: string[] = [];
-    const client = new GithubClient("test-token", { warn: (msg) => warnings.push(msg) });
+    const client = makeClient("test-token", { warn: (msg) => warnings.push(msg) });
     await client.teamMembers("acme", "platform").catch(() => undefined);
     expect(warnings).toEqual([]);
   });
@@ -264,8 +271,40 @@ describe("GithubClient rate-limit logging", () => {
     nock("https://api.github.com").get(/.*/).reply(403, { message: "forbidden" });
 
     const warnings: string[] = [];
-    const client = new GithubClient("test-token", { warn: (msg) => warnings.push(msg) });
+    const client = makeClient("test-token", { warn: (msg) => warnings.push(msg) });
     await client.teamMembers("acme", "platform").catch(() => undefined);
     expect(warnings).toEqual([]);
+  });
+});
+
+describe("rateLimitRetryHandler", () => {
+  const fakeOptions = { method: "GET", url: "/search/issues" } as Parameters<
+    ReturnType<typeof rateLimitRetryHandler>
+  >[1];
+
+  it("returns true and logs while under the retry budget", () => {
+    const warnings: string[] = [];
+    const handler = rateLimitRetryHandler({ warn: (m) => warnings.push(m) }, "primary rate limit");
+
+    expect(handler(5, fakeOptions, null, 0)).toBe(true);
+    expect(handler(5, fakeOptions, null, 2)).toBe(true);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/primary rate limit/);
+    expect(warnings[0]).toMatch(/retrying in 5s/);
+    expect(warnings[0]).toMatch(/attempt 1\/3/);
+    expect(warnings[1]).toMatch(/attempt 3\/3/);
+  });
+
+  it("returns false and logs once the retry budget is exhausted", () => {
+    const warnings: string[] = [];
+    const handler = rateLimitRetryHandler(
+      { warn: (m) => warnings.push(m) },
+      "secondary rate limit",
+    );
+
+    expect(handler(10, fakeOptions, null, 3)).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/secondary rate limit/);
+    expect(warnings[0]).toMatch(/gave up after 3 retries/);
   });
 });

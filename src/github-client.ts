@@ -1,5 +1,7 @@
-import { Octokit } from "@octokit/rest";
+import { Octokit as RestOctokit } from "@octokit/rest";
+import { throttling } from "@octokit/plugin-throttling";
 import { RequestError } from "@octokit/request-error";
+import type { EndpointDefaults } from "@octokit/types";
 import { isoSeconds } from "./util.js";
 
 export interface TeamMember {
@@ -34,6 +36,7 @@ export class ResultsTruncated extends GithubClientError {}
 
 const LOGIN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/;
 const SEARCH_RESULT_CAP = 1000;
+const MAX_RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_HEADERS = [
   "x-ratelimit-resource",
   "x-ratelimit-remaining",
@@ -43,8 +46,11 @@ const RATE_LIMIT_HEADERS = [
   "retry-after",
 ] as const;
 
+const ThrottledOctokit = RestOctokit.plugin(throttling);
+type ThrottledOctokitInstance = InstanceType<typeof ThrottledOctokit>;
+
 export class GithubClient {
-  private readonly octokit: Octokit;
+  private readonly octokit: ThrottledOctokitInstance;
   private readonly logger: Logger;
 
   static fromEnv(logger?: Logger): GithubClient {
@@ -53,9 +59,16 @@ export class GithubClient {
     return new GithubClient(token, logger);
   }
 
-  constructor(token: string, logger?: Logger) {
-    this.octokit = new Octokit({ auth: token });
+  constructor(token: string, logger?: Logger, options: { throttle?: boolean } = {}) {
     this.logger = logger ?? NOOP_LOGGER;
+    const handlers = {
+      onRateLimit: rateLimitRetryHandler(this.logger, "primary rate limit"),
+      onSecondaryRateLimit: rateLimitRetryHandler(this.logger, "secondary rate limit"),
+    };
+    this.octokit = new ThrottledOctokit({
+      auth: token,
+      throttle: options.throttle === false ? { ...handlers, enabled: false } : handlers,
+    });
     this.installRateLimitHook();
   }
 
@@ -146,4 +159,26 @@ function repoFromUrl(url: string): string {
   const m = url.match(/\/repos\/([^/]+)\/([^/]+)$/);
   if (!m) throw new Error(`unexpected repository_url shape: ${url}`);
   return `${m[1]}/${m[2]}`;
+}
+
+type RateLimitKind = "primary rate limit" | "secondary rate limit";
+
+/** @internal exported for unit tests; not part of the public API. */
+export function rateLimitRetryHandler(log: Logger, kind: RateLimitKind) {
+  return (
+    retryAfter: number,
+    options: Required<EndpointDefaults>,
+    _octokit: unknown,
+    retryCount: number,
+  ): boolean => {
+    const route = `${options.method} ${options.url}`;
+    if (retryCount >= MAX_RATE_LIMIT_RETRIES) {
+      log.warn(`${kind} hit ${route}; gave up after ${retryCount} retries`);
+      return false;
+    }
+    log.warn(
+      `${kind} hit ${route}; retrying in ${retryAfter}s (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
+    );
+    return true;
+  };
 }

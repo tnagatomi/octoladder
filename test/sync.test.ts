@@ -1,11 +1,10 @@
 import nock from "nock";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { OctoladderConfig } from "../src/config.js";
-import { GithubClient } from "../src/github-client.js";
 import { State } from "../src/state.js";
 import { Sync, type Logger } from "../src/sync.js";
 import { TeamsConfig } from "../src/teams-config.js";
-import { makePullRequest, makeUser } from "./helpers.js";
+import { makeClient, makePullRequest, makeUser } from "./helpers.js";
 
 beforeAll(() => nock.disableNetConnect());
 afterEach(() => nock.cleanAll());
@@ -22,7 +21,7 @@ function makeSync(
   return new Sync({
     state,
     teamsConfig: teamsConfig ?? defaultTeamsConfig(),
-    githubClient: new GithubClient("test-token"),
+    githubClient: makeClient(),
     config: config ?? new OctoladderConfig({ time_zone: "Asia/Tokyo" }),
     now: NOW,
     logger,
