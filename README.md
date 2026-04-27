@@ -76,7 +76,10 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add data/state.json
             git commit -m "chore: refresh state $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            git pull --rebase origin main
+            # If a concurrent workflow pushed first, both states are valid
+            # sync outputs — keep this run's because it ran later and saw
+            # the more recent GitHub API state.
+            git pull --rebase -X theirs origin main
             git push
           fi
 
