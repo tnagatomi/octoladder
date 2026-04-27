@@ -45229,7 +45229,6 @@ h1 { margin: 0.25rem 0 0.5rem; font-size: 1.5rem; }
 
 .period-nav a { color: var(--accent); text-decoration: none; }
 .period-nav a:hover { text-decoration: underline; }
-.period-nav .disabled { color: var(--border); }
 
 table.ranking {
   width: 100%;
@@ -45369,10 +45368,10 @@ function renderPeriodBody(opts) {
     const subtitle = period.subtitle ? `<p class="subtitle">${escapeHtml(period.subtitle)}</p>` : "";
     const prevLink = prev
         ? `<a href="${escapeHtml(prev.param)}.html" rel="prev">← Previous</a>`
-        : `<span class="disabled">← Previous</span>`;
+        : "";
     const nextLink = next
         ? `<a href="${escapeHtml(next.param)}.html" rel="next">Next →</a>`
-        : `<span class="disabled">Next →</span>`;
+        : "";
     const table = ranking.isEmpty
         ? `<p class="empty">No merged PRs in this period.</p>`
         : `<table class="ranking">
