@@ -8,7 +8,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
-    "build": "ncc build src/index.ts -o dist --license licenses.txt"
+    "build": "ncc build src/index.ts -o dist --license licenses.txt",
+    "build:dist": "npm ci && npm run build"
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
