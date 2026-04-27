@@ -142,10 +142,10 @@ function renderPeriodBody(opts: {
   const subtitle = period.subtitle ? `<p class="subtitle">${escapeHtml(period.subtitle)}</p>` : "";
   const prevLink = prev
     ? `<a href="${escapeHtml(prev.param)}.html" rel="prev">← Previous</a>`
-    : `<span class="disabled">← Previous</span>`;
+    : "";
   const nextLink = next
     ? `<a href="${escapeHtml(next.param)}.html" rel="next">Next →</a>`
-    : `<span class="disabled">Next →</span>`;
+    : "";
 
   const table = ranking.isEmpty
     ? `<p class="empty">No merged PRs in this period.</p>`

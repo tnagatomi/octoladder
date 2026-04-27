@@ -202,4 +202,25 @@ describe("Site", () => {
       expect(html).toMatch(/<span class="disabled">Latest yearly<\/span>/);
     });
   });
+
+  describe("period-nav prev/next", () => {
+    it("omits Next on the latest page of a type", () => {
+      const state = stateWith({ anchor: new Date("2025-01-01T00:00:00Z") });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+      expect(html).not.toMatch(/Next →/);
+      expect(html).toMatch(/← Previous/);
+    });
+
+    it("omits Previous on the oldest page of a type", () => {
+      const state = stateWith({ anchor: new Date("2025-01-01T00:00:00Z") });
+      siteFor(state, dir).call();
+
+      const html = readFileSync(join(dir, "weekly", "2025-W01.html"), "utf8");
+      expect(html).not.toMatch(/← Previous/);
+      expect(html).toMatch(/Next →/);
+    });
+  });
 });
