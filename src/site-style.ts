@@ -24,13 +24,19 @@ main {
   padding: 2rem 1rem;
 }
 
-.period-type {
-  margin: 0;
+.period-tabs {
+  display: flex;
+  gap: 1rem;
+  margin: 0 0 0.25rem;
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--muted);
 }
+
+.period-tabs a { color: var(--muted); text-decoration: none; }
+.period-tabs a:hover { text-decoration: underline; }
+.period-tabs a[aria-current="page"] { color: var(--fg); font-weight: 600; }
+.period-tabs .disabled { color: var(--border); }
 
 h1 { margin: 0.25rem 0 0.5rem; font-size: 1.5rem; }
 
