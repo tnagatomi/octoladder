@@ -1,7 +1,12 @@
 import { fromZonedTime } from "date-fns-tz";
+import { GithubClient, type Logger } from "../src/github-client.js";
 import type { StatePullRequest, StateUser } from "../src/state.js";
 
 export const TZ = "Asia/Tokyo";
+
+export function makeClient(token = "test-token", logger?: Logger): GithubClient {
+  return new GithubClient(token, logger, { throttle: false });
+}
 
 export function tokyo(
   year: number,
