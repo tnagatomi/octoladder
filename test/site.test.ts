@@ -144,4 +144,83 @@ describe("Site", () => {
     expect(html).toMatch(/alice/);
     expect(html).toMatch(/inactive/);
   });
+
+  describe("period tabs", () => {
+    function render(anchor: Date) {
+      siteFor(stateWith({ anchor }), dir).call();
+      return {
+        weekly: Period.latestClosed("weekly", NOW, TZ).param,
+        monthly: Period.latestClosed("monthly", NOW, TZ).param,
+        yearly: Period.latestClosed("yearly", NOW, TZ).param,
+      };
+    }
+
+    const FULL_ANCHOR = new Date("2025-01-01T00:00:00Z");
+
+    it("renders Latest weekly/monthly/yearly tabs on every period page", () => {
+      const { weekly, monthly, yearly } = render(FULL_ANCHOR);
+
+      for (const path of [
+        join(dir, "weekly", `${weekly}.html`),
+        join(dir, "monthly", `${monthly}.html`),
+        join(dir, "yearly", `${yearly}.html`),
+      ]) {
+        const html = readFileSync(path, "utf8");
+        expect(html).toMatch(/<nav class="period-tabs">/);
+        expect(html).toMatch(/Latest weekly/);
+        expect(html).toMatch(/Latest monthly/);
+        expect(html).toMatch(/Latest yearly/);
+      }
+    });
+
+    it("marks the current type's tab with aria-current on its latest page", () => {
+      const { weekly } = render(FULL_ANCHOR);
+      const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+      expect(html).toMatch(
+        new RegExp(`<a href="${weekly}\\.html" aria-current="page">Latest weekly</a>`),
+      );
+    });
+
+    it("does not mark a tab with aria-current on a non-latest page of that type", () => {
+      render(FULL_ANCHOR);
+      const olderWeekly = Period.latestClosed("weekly", NOW, TZ).prev().param;
+      const html = readFileSync(join(dir, "weekly", `${olderWeekly}.html`), "utf8");
+      expect(html).not.toMatch(/aria-current="page"/);
+    });
+
+    it("uses ../{type}/{param}.html for cross-type tab links", () => {
+      const { weekly, monthly, yearly } = render(FULL_ANCHOR);
+      const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+      expect(html).toMatch(new RegExp(`href="\\.\\./monthly/${monthly}\\.html"`));
+      expect(html).toMatch(new RegExp(`href="\\.\\./yearly/${yearly}\\.html"`));
+    });
+
+    it("renders disabled spans for tabs whose type has no enumerated periods", () => {
+      const { weekly } = render(new Date("2026-04-15T00:00:00Z"));
+      const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+      expect(html).toMatch(/<span class="disabled">Latest monthly<\/span>/);
+      expect(html).toMatch(/<span class="disabled">Latest yearly<\/span>/);
+    });
+  });
+
+  describe("period-nav prev/next", () => {
+    it("omits Next on the latest page of a type", () => {
+      const state = stateWith({ anchor: new Date("2025-01-01T00:00:00Z") });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+      expect(html).not.toMatch(/Next →/);
+      expect(html).toMatch(/← Previous/);
+    });
+
+    it("omits Previous on the oldest page of a type", () => {
+      const state = stateWith({ anchor: new Date("2025-01-01T00:00:00Z") });
+      siteFor(state, dir).call();
+
+      const html = readFileSync(join(dir, "weekly", "2025-W01.html"), "utf8");
+      expect(html).not.toMatch(/← Previous/);
+      expect(html).toMatch(/Next →/);
+    });
+  });
 });

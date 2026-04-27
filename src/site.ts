@@ -37,16 +37,18 @@ export class Site {
     for (const type of PERIOD_TYPES) {
       enumerated.set(type, this.enumeratePeriods(type));
     }
+    const latest = Object.fromEntries(
+      PERIOD_TYPES.map((type) => [type, enumerated.get(type)?.at(-1) ?? null]),
+    ) as Record<PeriodType, Period | null>;
     for (const periods of enumerated.values()) {
       for (let i = 0; i < periods.length; i++) {
         const period = periods[i]!;
         const prev = i > 0 ? periods[i - 1]! : null;
         const next = i < periods.length - 1 ? periods[i + 1]! : null;
-        this.renderPeriod(period, prev, next);
+        this.renderPeriod(period, prev, next, latest);
       }
     }
-    const weekly = enumerated.get("weekly") ?? [];
-    this.renderIndex(weekly[weekly.length - 1] ?? null);
+    this.renderIndex(latest.weekly);
     this.writeFile(join("assets", "style.css"), SITE_STYLE_CSS);
     return enumerated;
   }
@@ -71,7 +73,12 @@ export class Site {
     return periods;
   }
 
-  private renderPeriod(period: Period, prev: Period | null, next: Period | null): void {
+  private renderPeriod(
+    period: Period,
+    prev: Period | null,
+    next: Period | null,
+    latest: Record<PeriodType, Period | null>,
+  ): void {
     const counts = this.prCountsFor(period);
     const entries: RankingEntry<RowUser>[] = [];
     for (const [login, count] of counts) {
@@ -79,7 +86,7 @@ export class Site {
     }
     const ranking = new Ranking(entries);
 
-    const body = renderPeriodBody({ period, ranking, prev, next });
+    const body = renderPeriodBody({ period, ranking, prev, next, latest });
     const html = renderLayout({ title: period.label, assetPrefix: "../", body });
     this.writeFile(join(period.type, `${period.param}.html`), html);
   }
@@ -128,15 +135,17 @@ function renderPeriodBody(opts: {
   ranking: Ranking<RowUser>;
   prev: Period | null;
   next: Period | null;
+  latest: Record<PeriodType, Period | null>;
 }): string {
-  const { period, ranking, prev, next } = opts;
+  const { period, ranking, prev, next, latest } = opts;
+  const tabs = renderPeriodTabs(period, latest);
   const subtitle = period.subtitle ? `<p class="subtitle">${escapeHtml(period.subtitle)}</p>` : "";
   const prevLink = prev
     ? `<a href="${escapeHtml(prev.param)}.html" rel="prev">← Previous</a>`
-    : `<span class="disabled">← Previous</span>`;
+    : "";
   const nextLink = next
     ? `<a href="${escapeHtml(next.param)}.html" rel="next">Next →</a>`
-    : `<span class="disabled">Next →</span>`;
+    : "";
 
   const table = ranking.isEmpty
     ? `<p class="empty">No merged PRs in this period.</p>`
@@ -149,7 +158,7 @@ ${ranking.rows.map(rankingRow).join("\n")}
 <p class="totals">${ranking.contributorCount} contributors · ${ranking.totalCount} merged PRs</p>`;
 
   return `<header>
-  <p class="period-type">${escapeHtml(capitalize(period.type))}</p>
+  ${tabs}
   <h1>${escapeHtml(period.label)}</h1>
   ${subtitle}
   <nav class="period-nav">
@@ -159,6 +168,27 @@ ${ranking.rows.map(rankingRow).join("\n")}
 </header>
 
 ${table}`;
+}
+
+function renderPeriodTabs(
+  period: Period,
+  latest: Record<PeriodType, Period | null>,
+): string {
+  const items = PERIOD_TYPES.map((type) => {
+    const label = `Latest ${type}`;
+    const target = latest[type];
+    if (!target) {
+      return `<span class="disabled">${label}</span>`;
+    }
+    const href = type === period.type
+      ? `${target.param}.html`
+      : `../${type}/${target.param}.html`;
+    const current = period.equals(target) ? ` aria-current="page"` : "";
+    return `<a href="${escapeHtml(href)}"${current}>${label}</a>`;
+  });
+  return `<nav class="period-tabs">
+    ${items.join("\n    ")}
+  </nav>`;
 }
 
 function rankingRow(row: { rank: number; user: RowUser; count: number }): string {
@@ -208,8 +238,4 @@ function escapeHtml(input: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
-}
-
-function capitalize(input: string): string {
-  return input.length === 0 ? input : input[0]!.toUpperCase() + input.slice(1);
 }
