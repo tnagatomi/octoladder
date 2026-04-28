@@ -225,8 +225,8 @@ describe("GithubClient.mergedPrs", () => {
   });
 });
 
-describe("GithubClient rate-limit logging", () => {
-  it("logs rate-limit response headers on 403", async () => {
+describe("GithubClient request error logging", () => {
+  it("logs status, route, rate-limit headers, search query, and message on 403", async () => {
     nock("https://api.github.com")
       .get("/search/issues")
       .query(true)
@@ -253,27 +253,63 @@ describe("GithubClient rate-limit logging", () => {
       .catch(() => undefined);
 
     expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/GitHub 403 on GET \/search\/issues/);
     expect(warnings[0]).toMatch(/x-ratelimit-resource=search/);
     expect(warnings[0]).toMatch(/x-ratelimit-remaining=0/);
     expect(warnings[0]).toMatch(/retry-after=42/);
+    expect(warnings[0]).toMatch(/q="[^"]*author:octocat[^"]*"/);
+    expect(warnings[0]).toMatch(/message="API rate limit exceeded"/);
   });
 
-  it("does not log on non-rate-limit failures", async () => {
+  it("logs status, route, params, and message on 422 even without rate-limit headers", async () => {
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query(true)
+      .reply(422, {
+        message:
+          "Validation Failed: The listed users cannot be searched either because the users do not exist or you do not have permission to view the users.",
+      });
+
+    const warnings: string[] = [];
+    const client = makeClient("test-token", { warn: (msg) => warnings.push(msg) });
+    await client
+      .mergedPrs("ghost", {
+        from: new Date("2026-01-01T00:00:00Z"),
+        to: new Date("2026-02-01T00:00:00Z"),
+        minStars: 20,
+      })
+      .catch(() => undefined);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/GitHub 422 on GET \/search\/issues/);
+    expect(warnings[0]).toMatch(/q="[^"]*author:ghost[^"]*"/);
+    expect(warnings[0]).toMatch(/message="Validation Failed:/);
+    expect(warnings[0]).not.toMatch(/x-ratelimit/);
+  });
+
+  it("logs status, resolved URL, and message on team-member 404", async () => {
+    nock("https://api.github.com").get(/.*/).reply(404, { message: "Not Found" });
+
+    const warnings: string[] = [];
+    const client = makeClient("test-token", { warn: (msg) => warnings.push(msg) });
+    await client.teamMembers("acme", "missing").catch(() => undefined);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/GitHub 404 on GET/);
+    expect(warnings[0]).toMatch(/\/orgs\/acme\/teams\/missing\/members/);
+    expect(warnings[0]).toMatch(/message="Not Found"/);
+  });
+
+  it("does not include sensitive headers like authorization in the log line", async () => {
     nock("https://api.github.com").get(/.*/).reply(500, { message: "boom" });
 
     const warnings: string[] = [];
-    const client = makeClient("test-token", { warn: (msg) => warnings.push(msg) });
+    const client = makeClient("super-secret-token", { warn: (msg) => warnings.push(msg) });
     await client.teamMembers("acme", "platform").catch(() => undefined);
-    expect(warnings).toEqual([]);
-  });
 
-  it("does not log on rate-limit responses without rate-limit headers", async () => {
-    nock("https://api.github.com").get(/.*/).reply(403, { message: "forbidden" });
-
-    const warnings: string[] = [];
-    const client = makeClient("test-token", { warn: (msg) => warnings.push(msg) });
-    await client.teamMembers("acme", "platform").catch(() => undefined);
-    expect(warnings).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).not.toMatch(/super-secret-token/);
+    expect(warnings[0]).not.toMatch(/authorization/i);
   });
 });
 
@@ -306,5 +342,19 @@ describe("rateLimitRetryHandler", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/secondary rate limit/);
     expect(warnings[0]).toMatch(/gave up after 3 retries/);
+  });
+
+  it("includes whitelisted request params (search query) in the log line", () => {
+    const warnings: string[] = [];
+    const handler = rateLimitRetryHandler({ warn: (m) => warnings.push(m) }, "primary rate limit");
+    const optionsWithQuery = {
+      method: "GET",
+      url: "/search/issues",
+      q: "is:pr is:merged author:mktakuya",
+    } as unknown as Parameters<ReturnType<typeof rateLimitRetryHandler>>[1];
+
+    handler(2, optionsWithQuery, null, 0);
+
+    expect(warnings[0]).toMatch(/q="is:pr is:merged author:mktakuya"/);
   });
 });

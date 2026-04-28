@@ -45,6 +45,11 @@ const RATE_LIMIT_HEADERS = [
   "x-ratelimit-used",
   "retry-after",
 ] as const;
+// Allowlist of request parameter keys safe to surface in logs. Anything
+// sensitive (notably `headers` carrying the PAT) must never appear here.
+// Path params (org, repo, etc.) are already embedded in `options.url`, so
+// only fields that aren't readable from the URL alone are listed here.
+const LOGGABLE_PARAM_KEYS = ["q"] as const;
 
 const ThrottledOctokit = RestOctokit.plugin(throttling);
 type ThrottledOctokitInstance = InstanceType<typeof ThrottledOctokit>;
@@ -69,22 +74,28 @@ export class GithubClient {
       auth: token,
       throttle: options.throttle === false ? { ...handlers, enabled: false } : handlers,
     });
-    this.installRateLimitHook();
+    this.installRequestErrorHook();
   }
 
-  private installRateLimitHook(): void {
+  private installRequestErrorHook(): void {
     this.octokit.hook.error("request", (error, options) => {
-      if (error instanceof RequestError && (error.status === 403 || error.status === 429)) {
+      if (error instanceof RequestError) {
+        const parts: string[] = [`GitHub ${error.status} on ${options.method} ${options.url}`];
+
         const headers = error.response?.headers ?? {};
-        const summary = RATE_LIMIT_HEADERS
+        const rateLimitInfo = RATE_LIMIT_HEADERS
           .filter((name) => headers[name] !== undefined)
           .map((name) => `${name}=${headers[name]}`)
           .join(" ");
-        if (summary.length > 0) {
-          this.logger.warn(
-            `GitHub ${error.status} on ${options.method} ${options.url}: ${summary}`,
-          );
-        }
+        if (rateLimitInfo.length > 0) parts.push(rateLimitInfo);
+
+        const params = describeRequestParams(options);
+        if (params.length > 0) parts.push(params);
+
+        const message = extractResponseMessage(error.response?.data);
+        if (message !== undefined) parts.push(`message="${message}"`);
+
+        this.logger.warn(parts.join(" | "));
       }
       throw error;
     });
@@ -172,13 +183,34 @@ export function rateLimitRetryHandler(log: Logger, kind: RateLimitKind) {
     retryCount: number,
   ): boolean => {
     const route = `${options.method} ${options.url}`;
+    const params = describeRequestParams(options);
+    const paramsClause = params.length > 0 ? ` (${params})` : "";
     if (retryCount >= MAX_RATE_LIMIT_RETRIES) {
-      log.warn(`${kind} hit ${route}; gave up after ${retryCount} retries`);
+      log.warn(`${kind} hit ${route}${paramsClause}; gave up after ${retryCount} retries`);
       return false;
     }
     log.warn(
-      `${kind} hit ${route}; retrying in ${retryAfter}s (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
+      `${kind} hit ${route}${paramsClause}; retrying in ${retryAfter}s (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
     );
     return true;
   };
+}
+
+function describeRequestParams(options: unknown): string {
+  if (!options || typeof options !== "object") return "";
+  const record = options as Record<string, unknown>;
+  const parts: string[] = [];
+  for (const key of LOGGABLE_PARAM_KEYS) {
+    const value = record[key];
+    if (typeof value === "string" || typeof value === "number") {
+      parts.push(`${key}="${value}"`);
+    }
+  }
+  return parts.join(" ");
+}
+
+function extractResponseMessage(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const message = (data as { message?: unknown }).message;
+  return typeof message === "string" ? message : undefined;
 }
