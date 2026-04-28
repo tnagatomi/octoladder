@@ -6,6 +6,7 @@ import {
   MissingToken,
   rateLimitRetryHandler,
   ResultsTruncated,
+  UserNotSearchable,
 } from "../src/github-client.js";
 import { makeClient } from "./helpers.js";
 
@@ -205,6 +206,58 @@ describe("GithubClient.mergedPrs", () => {
       .catch((e) => e);
     expect(error).toBeInstanceOf(ResultsTruncated);
     expect((error as Error).message).toMatch(/1001/);
+  });
+
+  it("raises UserNotSearchable when GitHub returns 422 Search/q/invalid", async () => {
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query(true)
+      .reply(422, {
+        message: "Validation Failed",
+        errors: [
+          {
+            message:
+              "The listed users cannot be searched either because the users do not exist or you do not have permission to view the users.",
+            resource: "Search",
+            field: "q",
+            code: "invalid",
+          },
+        ],
+      });
+
+    const client = makeClient();
+    const error = await client
+      .mergedPrs("ghost", {
+        from: new Date("2026-01-01T00:00:00Z"),
+        to: new Date("2026-02-01T00:00:00Z"),
+        minStars: 20,
+      })
+      .then(() => null)
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(UserNotSearchable);
+    expect((error as Error).message).toMatch(/author:ghost/);
+  });
+
+  it("propagates 422 errors that are not Search/q/invalid as the original RequestError", async () => {
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query(true)
+      .reply(422, {
+        message: "Validation Failed",
+        errors: [{ resource: "Search", field: "q", code: "unrelated" }],
+      });
+
+    const client = makeClient();
+    const error = await client
+      .mergedPrs("octocat", {
+        from: new Date("2026-01-01T00:00:00Z"),
+        to: new Date("2026-02-01T00:00:00Z"),
+        minStars: 20,
+      })
+      .then(() => null)
+      .catch((e) => e);
+    expect(error).not.toBeInstanceOf(UserNotSearchable);
+    expect(error).toMatchObject({ status: 422 });
   });
 
   it("authenticates with the supplied token", async () => {

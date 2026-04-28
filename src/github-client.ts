@@ -1,7 +1,7 @@
 import { Octokit as RestOctokit } from "@octokit/rest";
 import { throttling } from "@octokit/plugin-throttling";
 import { RequestError } from "@octokit/request-error";
-import type { EndpointDefaults } from "@octokit/types";
+import type { EndpointDefaults, RequestError as RequestErrorPayload } from "@octokit/types";
 import { isoSeconds } from "./util.js";
 
 export interface TeamMember {
@@ -33,6 +33,7 @@ class GithubClientError extends Error {
 export class MissingToken extends GithubClientError {}
 export class InvalidLogin extends GithubClientError {}
 export class ResultsTruncated extends GithubClientError {}
+export class UserNotSearchable extends GithubClientError {}
 
 const LOGIN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/;
 const SEARCH_RESULT_CAP = 1000;
@@ -128,11 +129,22 @@ export class GithubClient {
 
     // Peek the first page to see total_count cheaply; bail if it exceeds the
     // 1000-result search cap before triggering follow-up page fetches.
-    const peek = await this.octokit.request("GET /search/issues", {
-      q,
-      per_page: 100,
-      advanced_search: "true",
-    });
+    let peek;
+    try {
+      peek = await this.octokit.request("GET /search/issues", {
+        q,
+        per_page: 100,
+        advanced_search: "true",
+      });
+    } catch (err) {
+      // The team membership API can still return a user that the global
+      // search index has dropped (rename lag, suspended account, deletion in
+      // progress); convert that into a per-user skip instead of failing sync.
+      if (isUserNotSearchable(err)) {
+        throw new UserNotSearchable(`GitHub search index does not recognize author:${login}`);
+      }
+      throw err;
+    }
 
     if (peek.data.total_count > SEARCH_RESULT_CAP) {
       throw new ResultsTruncated(
@@ -170,6 +182,16 @@ function repoFromUrl(url: string): string {
   const m = url.match(/\/repos\/([^/]+)\/([^/]+)$/);
   if (!m) throw new Error(`unexpected repository_url shape: ${url}`);
   return `${m[1]}/${m[2]}`;
+}
+
+function isUserNotSearchable(error: unknown): error is RequestError {
+  if (!(error instanceof RequestError) || error.status !== 422) return false;
+  const data = error.response?.data as RequestErrorPayload | undefined;
+  return (
+    data?.errors?.some(
+      (e) => e.resource === "Search" && e.field === "q" && e.code === "invalid",
+    ) ?? false
+  );
 }
 
 type RateLimitKind = "primary rate limit" | "secondary rate limit";
