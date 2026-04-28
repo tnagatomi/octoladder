@@ -220,6 +220,32 @@ describe("Sync", () => {
     expect(warn.mock.calls[0]![0]).toContain("1234");
   });
 
+  it("user that GitHub search rejects with 422 is skipped with a warning, others still processed", async () => {
+    stubMembers("acme", "platform", [
+      { id: 1, login: "alice", avatar_url: "x" },
+      { id: 2, login: "bob", avatar_url: "y" },
+    ]);
+    stubMembers("acme", "infra", []);
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query((q) => typeof q["q"] === "string" && q["q"].includes("author:alice"))
+      .reply(422, {
+        message: "Validation Failed",
+        errors: [{ resource: "Search", field: "q", code: "invalid" }],
+      });
+    stubSearch("bob", [prItem(201, "acme/widget", "2026-04-20T09:00:00Z")]);
+
+    const warn = vi.fn();
+    const state = new State();
+    await makeSync(state, undefined, undefined, { warn }).call();
+
+    expect(state.pullRequests).toHaveLength(1);
+    expect(state.pullRequests[0]!.author_login).toBe("bob");
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toMatch(/^Skipping alice: /);
+    expect(warn.mock.calls[0]![0]).toMatch(/author:alice/);
+  });
+
   it("non-truncation errors propagate and abort the sync", async () => {
     stubMembers("acme", "platform", [{ id: 1, login: "alice", avatar_url: "x" }]);
     stubMembers("acme", "infra", []);

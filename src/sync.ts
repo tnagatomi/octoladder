@@ -1,5 +1,11 @@
 import type { OctoladderConfig } from "./config.js";
-import { NOOP_LOGGER, ResultsTruncated, type GithubClient, type Logger } from "./github-client.js";
+import {
+  NOOP_LOGGER,
+  ResultsTruncated,
+  UserNotSearchable,
+  type GithubClient,
+  type Logger,
+} from "./github-client.js";
 import type { State, StatePullRequest, StateUser } from "./state.js";
 import type { TeamsConfig } from "./teams-config.js";
 import { isoSeconds } from "./util.js";
@@ -110,7 +116,7 @@ export class Sync {
           minStars: this.config.minStars,
         });
       } catch (err) {
-        if (err instanceof ResultsTruncated) {
+        if (err instanceof ResultsTruncated || err instanceof UserNotSearchable) {
           this.logger.warn(`Skipping ${user.login}: ${err.message}`);
           continue;
         }
