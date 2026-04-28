@@ -46436,6 +46436,11 @@ const RATE_LIMIT_HEADERS = [
     "x-ratelimit-used",
     "retry-after",
 ];
+// Allowlist of request parameter keys safe to surface in logs. Anything
+// sensitive (notably `headers` carrying the PAT) must never appear here.
+// Path params (org, repo, etc.) are already embedded in `options.url`, so
+// only fields that aren't readable from the URL alone are listed here.
+const LOGGABLE_PARAM_KEYS = ["q"];
 const ThrottledOctokit = dist_src_Octokit.plugin(throttling);
 class GithubClient {
     octokit;
@@ -46456,19 +46461,26 @@ class GithubClient {
             auth: token,
             throttle: options.throttle === false ? { ...handlers, enabled: false } : handlers,
         });
-        this.installRateLimitHook();
+        this.installRequestErrorHook();
     }
-    installRateLimitHook() {
+    installRequestErrorHook() {
         this.octokit.hook.error("request", (error, options) => {
-            if (error instanceof RequestError && (error.status === 403 || error.status === 429)) {
+            if (error instanceof RequestError) {
+                const parts = [`GitHub ${error.status} on ${options.method} ${options.url}`];
                 const headers = error.response?.headers ?? {};
-                const summary = RATE_LIMIT_HEADERS
+                const rateLimitInfo = RATE_LIMIT_HEADERS
                     .filter((name) => headers[name] !== undefined)
                     .map((name) => `${name}=${headers[name]}`)
                     .join(" ");
-                if (summary.length > 0) {
-                    this.logger.warn(`GitHub ${error.status} on ${options.method} ${options.url}: ${summary}`);
-                }
+                if (rateLimitInfo.length > 0)
+                    parts.push(rateLimitInfo);
+                const params = describeRequestParams(options);
+                if (params.length > 0)
+                    parts.push(params);
+                const message = extractResponseMessage(error.response?.data);
+                if (message !== undefined)
+                    parts.push(`message="${message}"`);
+                this.logger.warn(parts.join(" | "));
             }
             throw error;
         });
@@ -46526,13 +46538,34 @@ function repoFromUrl(url) {
 function rateLimitRetryHandler(log, kind) {
     return (retryAfter, options, _octokit, retryCount) => {
         const route = `${options.method} ${options.url}`;
+        const params = describeRequestParams(options);
+        const paramsClause = params.length > 0 ? ` (${params})` : "";
         if (retryCount >= MAX_RATE_LIMIT_RETRIES) {
-            log.warn(`${kind} hit ${route}; gave up after ${retryCount} retries`);
+            log.warn(`${kind} hit ${route}${paramsClause}; gave up after ${retryCount} retries`);
             return false;
         }
-        log.warn(`${kind} hit ${route}; retrying in ${retryAfter}s (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`);
+        log.warn(`${kind} hit ${route}${paramsClause}; retrying in ${retryAfter}s (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`);
         return true;
     };
+}
+function describeRequestParams(options) {
+    if (!options || typeof options !== "object")
+        return "";
+    const record = options;
+    const parts = [];
+    for (const key of LOGGABLE_PARAM_KEYS) {
+        const value = record[key];
+        if (typeof value === "string" || typeof value === "number") {
+            parts.push(`${key}="${value}"`);
+        }
+    }
+    return parts.join(" ");
+}
+function extractResponseMessage(data) {
+    if (!data || typeof data !== "object")
+        return undefined;
+    const message = data.message;
+    return typeof message === "string" ? message : undefined;
 }
 
 ;// CONCATENATED MODULE: external "node:path"
