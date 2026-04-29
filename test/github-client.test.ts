@@ -90,15 +90,15 @@ describe("GithubClient.teamMembers", () => {
 });
 
 describe("GithubClient.mergedPrs", () => {
-  it("builds a half-open search range and normalizes results", async () => {
+  it("builds a half-open search range, excludes archived repos, and filters by repo stars", async () => {
     const expectedQ =
-      "is:pr is:merged is:public author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z stars:>=20";
+      "is:pr is:merged is:public archived:false author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z";
 
     nock("https://api.github.com")
       .get("/search/issues")
       .query((q) => q["q"] === expectedQ)
       .reply(200, {
-        total_count: 1,
+        total_count: 2,
         items: [
           {
             id: 999,
@@ -106,8 +106,20 @@ describe("GithubClient.mergedPrs", () => {
             repository_url: "https://api.github.com/repos/acme/widget",
             pull_request: { merged_at: "2026-04-07T10:15:30Z" },
           },
+          {
+            id: 1000,
+            html_url: "https://github.com/acme/tinyrepo/pull/1",
+            repository_url: "https://api.github.com/repos/acme/tinyrepo",
+            pull_request: { merged_at: "2026-04-08T10:15:30Z" },
+          },
         ],
       });
+    nock("https://api.github.com")
+      .get("/repos/acme/widget")
+      .reply(200, { stargazers_count: 42 });
+    nock("https://api.github.com")
+      .get("/repos/acme/tinyrepo")
+      .reply(200, { stargazers_count: 3 });
 
     const client = makeClient();
     const prs = await client.mergedPrs("octocat", {
@@ -122,41 +134,111 @@ describe("GithubClient.mergedPrs", () => {
       html_url: "https://github.com/acme/widget/pull/12",
       repo_full_name: "acme/widget",
     });
+    expect(nock.isDone()).toBe(true);
   });
 
-  it("forwards a custom minStars to the search query", async () => {
-    const expectedQ =
-      "is:pr is:merged is:public author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z stars:>=100";
-
+  it("honors a custom minStars threshold post-search", async () => {
     nock("https://api.github.com")
       .get("/search/issues")
-      .query((q) => q["q"] === expectedQ)
-      .reply(200, { total_count: 0, items: [] });
+      .query(true)
+      .reply(200, {
+        total_count: 1,
+        items: [
+          {
+            id: 1,
+            html_url: "https://github.com/acme/widget/pull/1",
+            repository_url: "https://api.github.com/repos/acme/widget",
+            pull_request: { merged_at: "2026-04-07T10:15:30Z" },
+          },
+        ],
+      });
+    nock("https://api.github.com")
+      .get("/repos/acme/widget")
+      .reply(200, { stargazers_count: 42 });
 
     const client = makeClient();
-    await client.mergedPrs("octocat", {
+    const prs = await client.mergedPrs("octocat", {
       from: new Date("2026-04-06T00:00:00Z"),
       to: new Date("2026-04-13T00:00:00Z"),
       minStars: 100,
     });
+    expect(prs).toHaveLength(0);
     expect(nock.isDone()).toBe(true);
   });
 
-  it("omits the stars qualifier when minStars is 0", async () => {
+  it("skips the repo lookup entirely when minStars is 0", async () => {
     const expectedQ =
-      "is:pr is:merged is:public author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z";
+      "is:pr is:merged is:public archived:false author:octocat merged:2026-04-06T00:00:00Z..2026-04-12T23:59:59Z";
 
     nock("https://api.github.com")
       .get("/search/issues")
       .query((q) => q["q"] === expectedQ)
-      .reply(200, { total_count: 0, items: [] });
+      .reply(200, {
+        total_count: 1,
+        items: [
+          {
+            id: 1,
+            html_url: "https://github.com/acme/widget/pull/1",
+            repository_url: "https://api.github.com/repos/acme/widget",
+            pull_request: { merged_at: "2026-04-07T10:15:30Z" },
+          },
+        ],
+      });
 
     const client = makeClient();
-    await client.mergedPrs("octocat", {
+    const prs = await client.mergedPrs("octocat", {
       from: new Date("2026-04-06T00:00:00Z"),
       to: new Date("2026-04-13T00:00:00Z"),
       minStars: 0,
     });
+    expect(prs).toHaveLength(1);
+    expect(nock.isDone()).toBe(true);
+  });
+
+  it("caches repo stargazer counts across multiple authors in the same client", async () => {
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query(true)
+      .reply(200, {
+        total_count: 1,
+        items: [
+          {
+            id: 1,
+            html_url: "https://github.com/acme/widget/pull/1",
+            repository_url: "https://api.github.com/repos/acme/widget",
+            pull_request: { merged_at: "2026-04-07T10:15:30Z" },
+          },
+        ],
+      });
+    nock("https://api.github.com")
+      .get("/search/issues")
+      .query(true)
+      .reply(200, {
+        total_count: 1,
+        items: [
+          {
+            id: 2,
+            html_url: "https://github.com/acme/widget/pull/2",
+            repository_url: "https://api.github.com/repos/acme/widget",
+            pull_request: { merged_at: "2026-04-08T10:15:30Z" },
+          },
+        ],
+      });
+    // Only one /repos lookup is expected for two authors hitting the same repo.
+    nock("https://api.github.com")
+      .get("/repos/acme/widget")
+      .reply(200, { stargazers_count: 50 });
+
+    const client = makeClient();
+    const opts = {
+      from: new Date("2026-04-06T00:00:00Z"),
+      to: new Date("2026-04-13T00:00:00Z"),
+      minStars: 20,
+    };
+    const a = await client.mergedPrs("octocat", opts);
+    const b = await client.mergedPrs("hubot", opts);
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(1);
     expect(nock.isDone()).toBe(true);
   });
 

@@ -49,6 +49,12 @@ function stubSearch(login: string, items: SearchItem[] = [], totalCount?: number
     .reply(200, { total_count: totalCount ?? items.length, items });
 }
 
+function stubRepo(fullName: string, stargazers: number): void {
+  nock("https://api.github.com")
+    .get(`/repos/${fullName}`)
+    .reply(200, { stargazers_count: stargazers });
+}
+
 interface SearchItem {
   id: number;
   html_url: string;
@@ -72,6 +78,7 @@ describe("Sync", () => {
     ]);
     stubMembers("acme", "infra", []);
     stubSearch("alice", [prItem(100, "acme/widget", "2026-04-20T09:00:00Z")]);
+    stubRepo("acme/widget", 50);
 
     const state = new State();
     await makeSync(state).call();
@@ -182,19 +189,22 @@ describe("Sync", () => {
     expect(state.users[0]!.team_keys).toEqual(["acme/infra", "acme/platform"]);
   });
 
-  it("forwards configured min_stars to the search query", async () => {
+  it("filters PRs whose repository is below the configured min_stars", async () => {
     stubMembers("acme", "platform", [{ id: 1, login: "alice", avatar_url: "x" }]);
     stubMembers("acme", "infra", []);
-
-    nock("https://api.github.com")
-      .get("/search/issues")
-      .query((q) => typeof q["q"] === "string" && q["q"].includes("stars:>=50"))
-      .reply(200, { total_count: 0, items: [] });
+    stubSearch("alice", [
+      prItem(100, "acme/popular", "2026-04-20T09:00:00Z"),
+      prItem(101, "acme/obscure", "2026-04-21T09:00:00Z"),
+    ]);
+    stubRepo("acme/popular", 80);
+    stubRepo("acme/obscure", 4);
 
     const state = new State();
     const config = new OctoladderConfig({ time_zone: "Asia/Tokyo", min_stars: 50 });
     await makeSync(state, undefined, config).call();
 
+    expect(state.pullRequests).toHaveLength(1);
+    expect(state.pullRequests[0]!.repo_full_name).toBe("acme/popular");
     expect(nock.isDone()).toBe(true);
   });
 
@@ -206,6 +216,7 @@ describe("Sync", () => {
     stubMembers("acme", "infra", []);
     stubSearch("alice", [], 1234);
     stubSearch("bob", [prItem(200, "acme/widget", "2026-04-20T09:00:00Z")]);
+    stubRepo("acme/widget", 50);
 
     const warn = vi.fn();
     const state = new State();
@@ -234,6 +245,7 @@ describe("Sync", () => {
         errors: [{ resource: "Search", field: "q", code: "invalid" }],
       });
     stubSearch("bob", [prItem(201, "acme/widget", "2026-04-20T09:00:00Z")]);
+    stubRepo("acme/widget", 50);
 
     const warn = vi.fn();
     const state = new State();
@@ -271,6 +283,7 @@ describe("Sync", () => {
         total_count: 1,
         items: [prItem(100, "acme/widget", "2026-04-20T09:00:00Z")],
       });
+    stubRepo("acme/widget", 50);
 
     const state = new State({
       syncedAt: new Date("2026-04-20T00:00:00Z"),
