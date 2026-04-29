@@ -74,6 +74,11 @@ export class GithubClient {
     this.octokit = new ThrottledOctokit({
       auth: token,
       throttle: options.throttle === false ? { ...handlers, enabled: false } : handlers,
+      // Suppress @octokit/plugin-request-log's per-attempt URL-encoded error
+      // line; throttling-managed retries are reported through onRateLimit /
+      // onSecondaryRateLimit, and terminal failures still surface via the
+      // hook.error handler installed below.
+      log: { debug: () => {}, info: () => {}, warn: console.warn, error: () => {} },
     });
     this.installRequestErrorHook();
   }
