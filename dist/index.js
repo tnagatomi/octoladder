@@ -46447,6 +46447,12 @@ const ThrottledOctokit = dist_src_Octokit.plugin(throttling);
 class GithubClient {
     octokit;
     logger;
+    // Per-instance cache of stargazer counts keyed by `owner/repo`. Search
+    // results from many authors typically converge on the same handful of
+    // popular repos, so caching avoids hammering /repos/{owner}/{repo} for
+    // every PR. Lifetime is one CLI run, which matches when star counts are
+    // expected to be stable for filtering purposes.
+    stargazersByRepo = new Map();
     static fromEnv(logger) {
         const token = (process.env["GITHUB_TOKEN"] ?? "").trim();
         if (token.length === 0)
@@ -46507,8 +46513,11 @@ class GithubClient {
         }
         const fromIso = isoSeconds(opts.from);
         const toIso = isoSeconds(new Date(opts.to.getTime() - 1000));
-        const stars = opts.minStars > 0 ? ` stars:>=${opts.minStars}` : "";
-        const q = `is:pr is:merged is:public author:${login} merged:${fromIso}..${toIso}${stars}`;
+        // GitHub's issue search has no `stars:` qualifier — it's a repository-
+        // search-only field, so any `stars:>=N` token gets parsed as free text
+        // and silently throws off the result set. The star floor is enforced
+        // post-search via `/repos/{owner}/{repo}` lookups below.
+        const q = `is:pr is:merged is:public archived:false author:${login} merged:${fromIso}..${toIso}`;
         // Peek the first page to see total_count cheaply; bail if it exceeds the
         // 1000-result search cap before triggering follow-up page fetches.
         let peek;
@@ -46538,12 +46547,29 @@ class GithubClient {
                 advanced_search: "true",
             }))
             : peek.data.items;
-        return items.map((item) => ({
+        const candidates = items.map((item) => ({
             github_id: item.id,
             merged_at: new Date(item.pull_request.merged_at),
             html_url: item.html_url,
             repo_full_name: repoFromUrl(item.repository_url),
         }));
+        if (opts.minStars <= 0)
+            return candidates;
+        const uniqueRepos = [...new Set(candidates.map((c) => c.repo_full_name))];
+        await Promise.all(uniqueRepos.map((r) => this.repoStargazerCount(r)));
+        return candidates.filter((pr) => this.stargazersByRepo.get(pr.repo_full_name) >= opts.minStars);
+    }
+    async repoStargazerCount(fullName) {
+        const cached = this.stargazersByRepo.get(fullName);
+        if (cached !== undefined)
+            return cached;
+        const slash = fullName.indexOf("/");
+        const owner = fullName.slice(0, slash);
+        const repo = fullName.slice(slash + 1);
+        const res = await this.octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
+        const count = res.data.stargazers_count;
+        this.stargazersByRepo.set(fullName, count);
+        return count;
     }
 }
 function repoFromUrl(url) {
