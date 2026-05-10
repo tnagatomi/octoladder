@@ -46552,6 +46552,7 @@ class GithubClient {
             merged_at: new Date(item.pull_request.merged_at),
             html_url: item.html_url,
             repo_full_name: repoFromUrl(item.repository_url),
+            title: item.title,
         }));
         if (opts.minStars <= 0)
             return candidates;
@@ -47181,9 +47182,69 @@ td.contributor img { border-radius: 50%; }
 .inactive { color: var(--muted); font-size: 0.85rem; }
 .empty { color: var(--muted); font-style: italic; }
 .totals { margin-top: 1rem; color: var(--muted); font-size: 0.9rem; }
+
+td.contributor a { color: var(--accent); text-decoration: none; }
+td.contributor a:hover { text-decoration: underline; }
+
+a.back {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+a.back:hover { text-decoration: underline; }
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.profile-card img { border-radius: 50%; }
+.profile-card h1 { margin: 0; font-size: 1.5rem; }
+.profile-card h1 a { color: var(--fg); text-decoration: none; }
+.profile-card h1 a:hover { text-decoration: underline; }
+.profile-card .summary { margin: 0.25rem 0 0; color: var(--muted); }
+
+.repo-group { margin: 1.5rem 0; }
+.repo-group h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.repo-group h2 a { color: var(--fg); text-decoration: none; }
+.repo-group h2 a:hover { text-decoration: underline; }
+
+ul.prs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+ul.prs li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+ul.prs a { color: var(--accent); text-decoration: none; }
+ul.prs a:hover { text-decoration: underline; }
+ul.prs time {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 `;
 
 ;// CONCATENATED MODULE: ./src/site.ts
+
 
 
 
@@ -47206,6 +47267,9 @@ class Site {
         this.parsedPrs = opts.state.pullRequests.map((pr) => ({
             author: pr.author_login,
             mergedAt: new Date(pr.merged_at),
+            htmlUrl: pr.html_url,
+            repoFullName: pr.repo_full_name,
+            title: pr.title,
         }));
     }
     call() {
@@ -47246,33 +47310,50 @@ class Site {
         return periods;
     }
     renderPeriod(period, prev, next, latest) {
-        const ranking = this.rankingFor(period);
-        const prevRanking = prev ? this.rankingFor(prev) : null;
+        const { ranking, detailJobs } = this.rankingFor(period);
+        const prevRanking = prev ? this.rankingFor(prev).ranking : null;
         const deltas = computeRankDeltas(ranking, prevRanking, (u) => u.login);
         const body = renderPeriodBody({ period, ranking, deltas, prev, next, latest });
         const html = renderLayout({ title: period.label, assetPrefix: "../", body });
         this.writeFile((0,external_node_path_namespaceObject.join)(period.type, `${period.param}.html`), html);
+        for (const { user, prs } of detailJobs) {
+            this.renderUserDetail(period, user, prs);
+        }
     }
     rankingFor(period) {
-        const counts = this.prCountsFor(period);
+        const prsByLogin = this.prsByLoginFor(period);
         const entries = [];
-        for (const [login, count] of counts) {
-            entries.push({ user: this.usersByLogin.get(login) ?? { login }, count });
+        const detailJobs = [];
+        for (const [login, prs] of prsByLogin) {
+            const user = this.usersByLogin.get(login) ?? { login };
+            entries.push({ user, count: prs.length });
+            detailJobs.push({ user, prs });
         }
-        return new Ranking(entries);
+        return { ranking: new Ranking(entries), detailJobs };
+    }
+    renderUserDetail(period, user, prs) {
+        const body = renderUserDetailBody({ period, user, prs, timeZone: this.timeZone });
+        const login = user.login;
+        const title = `${login} · ${period.label}`;
+        const html = renderLayout({ title, assetPrefix: "../../", body });
+        this.writeFile((0,external_node_path_namespaceObject.join)(period.type, period.param, `${login}.html`), html);
     }
     renderIndex(latestWeekly) {
         const target = latestWeekly ? `weekly/${latestWeekly.param}.html` : null;
         this.writeFile("index.html", renderIndexHtml(target));
     }
-    prCountsFor(period) {
-        const counts = new Map();
+    prsByLoginFor(period) {
+        const byLogin = new Map();
         for (const pr of this.parsedPrs) {
             if (!period.contains(pr.mergedAt))
                 continue;
-            counts.set(pr.author, (counts.get(pr.author) ?? 0) + 1);
+            const list = byLogin.get(pr.author);
+            if (list)
+                list.push(pr);
+            else
+                byLogin.set(pr.author, [pr]);
         }
-        return counts;
+        return byLogin;
     }
     writeFile(relPath, content) {
         const full = (0,external_node_path_namespaceObject.join)(this.outputDir, relPath);
@@ -47312,7 +47393,7 @@ function renderPeriodBody(opts) {
         : `<table class="ranking">
   <thead><tr><th>Rank</th><th>Contributor</th><th>PRs</th></tr></thead>
   <tbody>
-${ranking.rows.map((row) => rankingRow(row, deltas.get(row.user.login) ?? null)).join("\n")}
+${ranking.rows.map((row) => rankingRow(row, deltas.get(row.user.login) ?? null, period)).join("\n")}
   </tbody>
 </table>
 <p class="totals">${ranking.contributorCount} contributors · ${ranking.totalCount} merged PRs</p>`;
@@ -47345,18 +47426,91 @@ function renderPeriodTabs(period, latest) {
     ${items.join("\n    ")}
   </nav>`;
 }
-function rankingRow(row, delta) {
+function renderUserDetailBody(opts) {
+    const { period, user, prs, timeZone } = opts;
+    const partial = user;
+    const avatar = partial.avatar_url
+        ? `<img src="${escapeHtml(partial.avatar_url)}" alt="" width="48" height="48">`
+        : "";
+    const profileHref = `https://github.com/${encodeURIComponent(partial.login)}`;
+    const repoCount = new Set(prs.map((pr) => pr.repoFullName)).size;
+    const summary = `${prs.length} merged ${pluralize("PR", prs.length)} across ${repoCount} ${pluralize("repository", repoCount, "repositories")}`;
+    return `<header class="profile">
+  <a class="back" href="../${escapeHtml(period.param)}.html">← Back to ${escapeHtml(period.label)}</a>
+  <div class="profile-card">
+    ${avatar}
+    <div>
+      <h1><a href="${escapeHtml(profileHref)}" rel="noopener noreferrer">${escapeHtml(partial.login)}</a></h1>
+      <p class="summary">${escapeHtml(summary)}</p>
+    </div>
+  </div>
+</header>
+
+${renderRepoGroups(prs, timeZone)}`;
+}
+function renderRepoGroups(prs, timeZone) {
+    const byRepo = new Map();
+    for (const pr of prs) {
+        const list = byRepo.get(pr.repoFullName);
+        if (list)
+            list.push(pr);
+        else
+            byRepo.set(pr.repoFullName, [pr]);
+    }
+    const repos = [...byRepo.keys()].sort();
+    return repos
+        .map((repo) => {
+        const repoHref = `https://github.com/${repo
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/")}`;
+        const items = byRepo
+            .get(repo)
+            .slice()
+            .sort((a, b) => b.mergedAt.getTime() - a.mergedAt.getTime())
+            .map((pr) => renderPrItem(pr, timeZone))
+            .join("\n");
+        return `<section class="repo-group">
+  <h2><a href="${escapeHtml(repoHref)}" rel="noopener noreferrer">${escapeHtml(repo)}</a></h2>
+  <ul class="prs">
+${items}
+  </ul>
+</section>`;
+    })
+        .join("\n");
+}
+function renderPrItem(pr, timeZone) {
+    const numberLabel = `#${extractPrNumber(pr.htmlUrl)}`;
+    const linkText = pr.title ? `${numberLabel} ${pr.title}` : numberLabel;
+    const isoDateTime = pr.mergedAt.toISOString();
+    const localized = formatInTimeZone(pr.mergedAt, timeZone, "yyyy-MM-dd HH:mm");
+    return `    <li>
+      <a href="${escapeHtml(pr.htmlUrl)}">${escapeHtml(linkText)}</a>
+      <time datetime="${escapeHtml(isoDateTime)}">${escapeHtml(localized)}</time>
+    </li>`;
+}
+function extractPrNumber(htmlUrl) {
+    const m = htmlUrl.match(/\/pull\/(\d+)(?:[/?#]|$)/);
+    if (!m)
+        throw new Error(`unexpected PR html_url shape: ${htmlUrl}`);
+    return m[1];
+}
+function pluralize(noun, count, plural = `${noun}s`) {
+    return count === 1 ? noun : plural;
+}
+function rankingRow(row, delta, period) {
     const user = row.user;
     const avatar = user.avatar_url
         ? `<img src="${escapeHtml(user.avatar_url)}" alt="" width="24" height="24">`
         : "";
     const name = user.name ?? user.login;
+    const detailHref = `${period.param}/${user.login}.html`;
     const inactive = user.active === false
         ? `<span class="inactive" title="No longer in any tracked team">(inactive)</span>`
         : "";
     return `    <tr>
       <td class="rank"><span class="rank-num">${row.rank}</span>${renderRankDelta(delta)}</td>
-      <td class="contributor">${avatar}<span>${escapeHtml(name)}</span>${inactive}</td>
+      <td class="contributor">${avatar}<a href="${escapeHtml(detailHref)}">${escapeHtml(name)}</a>${inactive}</td>
       <td class="count">${row.count}</td>
     </tr>`;
 }
@@ -47581,6 +47735,7 @@ class Sync {
                     merged_at: isoSeconds(pr.merged_at),
                     html_url: pr.html_url,
                     repo_full_name: pr.repo_full_name,
+                    title: pr.title,
                 };
                 this.state.pullRequests.push(record);
                 seenIds.add(pr.github_id);
