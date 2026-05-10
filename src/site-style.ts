@@ -6,6 +6,8 @@ export const SITE_STYLE_CSS = `:root {
   --border: #d0d7de;
   --bg: #ffffff;
   --accent: #0969da;
+  --rank-up: #1a6e34;
+  --rank-down: #a4222a;
 }
 
 * { box-sizing: border-box; }
@@ -64,7 +66,11 @@ table.ranking th, table.ranking td {
 
 table.ranking th { font-weight: 600; color: var(--muted); }
 
-td.rank { width: 3rem; color: var(--muted); }
+td.rank { width: 5rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+td.rank .rank-num { color: var(--fg); }
+td.rank .rank-delta-up { color: var(--rank-up); font-size: 0.85rem; }
+td.rank .rank-delta-down { color: var(--rank-down); font-size: 0.85rem; }
+td.rank .rank-delta-none { color: var(--border); font-size: 0.85rem; }
 td.count { width: 4rem; text-align: right; font-variant-numeric: tabular-nums; }
 
 td.contributor { display: flex; align-items: center; gap: 0.5rem; }
