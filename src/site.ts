@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Period, PERIOD_TYPES, type PeriodType } from "./period.js";
 import { Ranking, type RankingEntry } from "./ranking.js";
+import { computeRankDeltas, type RankDelta } from "./ranking-delta.js";
 import { SITE_STYLE_CSS } from "./site-style.js";
 import type { State, StateUser } from "./state.js";
 
@@ -79,16 +80,22 @@ export class Site {
     next: Period | null,
     latest: Record<PeriodType, Period | null>,
   ): void {
+    const ranking = this.rankingFor(period);
+    const prevRanking = prev ? this.rankingFor(prev) : null;
+    const deltas = computeRankDeltas(ranking, prevRanking, (u) => u.login);
+
+    const body = renderPeriodBody({ period, ranking, deltas, prev, next, latest });
+    const html = renderLayout({ title: period.label, assetPrefix: "../", body });
+    this.writeFile(join(period.type, `${period.param}.html`), html);
+  }
+
+  private rankingFor(period: Period): Ranking<RowUser> {
     const counts = this.prCountsFor(period);
     const entries: RankingEntry<RowUser>[] = [];
     for (const [login, count] of counts) {
       entries.push({ user: this.usersByLogin.get(login) ?? { login }, count });
     }
-    const ranking = new Ranking(entries);
-
-    const body = renderPeriodBody({ period, ranking, prev, next, latest });
-    const html = renderLayout({ title: period.label, assetPrefix: "../", body });
-    this.writeFile(join(period.type, `${period.param}.html`), html);
+    return new Ranking(entries);
   }
 
   private renderIndex(latestWeekly: Period | null): void {
@@ -133,11 +140,12 @@ function renderLayout(opts: { title: string; assetPrefix: string; body: string }
 function renderPeriodBody(opts: {
   period: Period;
   ranking: Ranking<RowUser>;
+  deltas: Map<string, RankDelta>;
   prev: Period | null;
   next: Period | null;
   latest: Record<PeriodType, Period | null>;
 }): string {
-  const { period, ranking, prev, next, latest } = opts;
+  const { period, ranking, deltas, prev, next, latest } = opts;
   const tabs = renderPeriodTabs(period, latest);
   const subtitle = period.subtitle ? `<p class="subtitle">${escapeHtml(period.subtitle)}</p>` : "";
   const prevLink = prev
@@ -152,7 +160,7 @@ function renderPeriodBody(opts: {
     : `<table class="ranking">
   <thead><tr><th>Rank</th><th>Contributor</th><th>PRs</th></tr></thead>
   <tbody>
-${ranking.rows.map(rankingRow).join("\n")}
+${ranking.rows.map((row) => rankingRow(row, deltas.get(row.user.login) ?? null)).join("\n")}
   </tbody>
 </table>
 <p class="totals">${ranking.contributorCount} contributors · ${ranking.totalCount} merged PRs</p>`;
@@ -191,7 +199,10 @@ function renderPeriodTabs(
   </nav>`;
 }
 
-function rankingRow(row: { rank: number; user: RowUser; count: number }): string {
+function rankingRow(
+  row: { rank: number; user: RowUser; count: number },
+  delta: RankDelta,
+): string {
   const user = row.user as Partial<StateUser> & { login: string };
   const avatar = user.avatar_url
     ? `<img src="${escapeHtml(user.avatar_url)}" alt="" width="24" height="24">`
@@ -202,10 +213,17 @@ function rankingRow(row: { rank: number; user: RowUser; count: number }): string
       ? `<span class="inactive" title="No longer in any tracked team">(inactive)</span>`
       : "";
   return `    <tr>
-      <td class="rank">${row.rank}</td>
+      <td class="rank"><span class="rank-num">${row.rank}</span>${renderRankDelta(delta)}</td>
       <td class="contributor">${avatar}<span>${escapeHtml(name)}</span>${inactive}</td>
       <td class="count">${row.count}</td>
     </tr>`;
+}
+
+function renderRankDelta(delta: RankDelta): string {
+  if (delta === null) return ` <span class="rank-delta-none" title="No comparison available">—</span>`;
+  if (delta === 0) return "";
+  if (delta > 0) return ` <span class="rank-delta-up" title="Up ${delta} from previous period">↑</span>`;
+  return ` <span class="rank-delta-down" title="Down ${-delta} from previous period">↓</span>`;
 }
 
 function renderIndexHtml(target: string | null): string {
