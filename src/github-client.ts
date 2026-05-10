@@ -15,6 +15,7 @@ export interface MergedPr {
   merged_at: Date;
   html_url: string;
   repo_full_name: string;
+  title: string;
 }
 
 export interface Logger {
@@ -180,6 +181,7 @@ export class GithubClient {
       merged_at: new Date(item.pull_request.merged_at),
       html_url: item.html_url,
       repo_full_name: repoFromUrl(item.repository_url),
+      title: item.title,
     }));
 
     if (opts.minStars <= 0) return candidates;
@@ -208,6 +210,7 @@ interface MergedPrItem {
   id: number;
   html_url: string;
   repository_url: string;
+  title: string;
   pull_request: { merged_at: string };
 }
 

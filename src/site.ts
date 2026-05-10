@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { formatInTimeZone } from "date-fns-tz";
 import { Period, PERIOD_TYPES, type PeriodType } from "./period.js";
 import { Ranking, type RankingEntry } from "./ranking.js";
 import { computeRankDeltas, type RankDelta } from "./ranking-delta.js";
@@ -9,6 +10,9 @@ import type { State, StateUser } from "./state.js";
 interface ParsedPr {
   author: string;
   mergedAt: Date;
+  htmlUrl: string;
+  repoFullName: string;
+  title?: string;
 }
 
 type RowUser = StateUser | { login: string };
@@ -30,6 +34,9 @@ export class Site {
     this.parsedPrs = opts.state.pullRequests.map((pr) => ({
       author: pr.author_login,
       mergedAt: new Date(pr.merged_at),
+      htmlUrl: pr.html_url,
+      repoFullName: pr.repo_full_name,
+      title: pr.title,
     }));
   }
 
@@ -80,22 +87,40 @@ export class Site {
     next: Period | null,
     latest: Record<PeriodType, Period | null>,
   ): void {
-    const ranking = this.rankingFor(period);
-    const prevRanking = prev ? this.rankingFor(prev) : null;
+    const { ranking, detailJobs } = this.rankingFor(period);
+    const prevRanking = prev ? this.rankingFor(prev).ranking : null;
     const deltas = computeRankDeltas(ranking, prevRanking, (u) => u.login);
 
     const body = renderPeriodBody({ period, ranking, deltas, prev, next, latest });
     const html = renderLayout({ title: period.label, assetPrefix: "../", body });
     this.writeFile(join(period.type, `${period.param}.html`), html);
+
+    for (const { user, prs } of detailJobs) {
+      this.renderUserDetail(period, user, prs);
+    }
   }
 
-  private rankingFor(period: Period): Ranking<RowUser> {
-    const counts = this.prCountsFor(period);
+  private rankingFor(period: Period): {
+    ranking: Ranking<RowUser>;
+    detailJobs: Array<{ user: RowUser; prs: ParsedPr[] }>;
+  } {
+    const prsByLogin = this.prsByLoginFor(period);
     const entries: RankingEntry<RowUser>[] = [];
-    for (const [login, count] of counts) {
-      entries.push({ user: this.usersByLogin.get(login) ?? { login }, count });
+    const detailJobs: Array<{ user: RowUser; prs: ParsedPr[] }> = [];
+    for (const [login, prs] of prsByLogin) {
+      const user = this.usersByLogin.get(login) ?? { login };
+      entries.push({ user, count: prs.length });
+      detailJobs.push({ user, prs });
     }
-    return new Ranking(entries);
+    return { ranking: new Ranking(entries), detailJobs };
+  }
+
+  private renderUserDetail(period: Period, user: RowUser, prs: ParsedPr[]): void {
+    const body = renderUserDetailBody({ period, user, prs, timeZone: this.timeZone });
+    const login = (user as { login: string }).login;
+    const title = `${login} · ${period.label}`;
+    const html = renderLayout({ title, assetPrefix: "../../", body });
+    this.writeFile(join(period.type, period.param, `${login}.html`), html);
   }
 
   private renderIndex(latestWeekly: Period | null): void {
@@ -103,13 +128,15 @@ export class Site {
     this.writeFile("index.html", renderIndexHtml(target));
   }
 
-  private prCountsFor(period: Period): Map<string, number> {
-    const counts = new Map<string, number>();
+  private prsByLoginFor(period: Period): Map<string, ParsedPr[]> {
+    const byLogin = new Map<string, ParsedPr[]>();
     for (const pr of this.parsedPrs) {
       if (!period.contains(pr.mergedAt)) continue;
-      counts.set(pr.author, (counts.get(pr.author) ?? 0) + 1);
+      const list = byLogin.get(pr.author);
+      if (list) list.push(pr);
+      else byLogin.set(pr.author, [pr]);
     }
-    return counts;
+    return byLogin;
   }
 
   private writeFile(relPath: string, content: string): void {
@@ -160,7 +187,7 @@ function renderPeriodBody(opts: {
     : `<table class="ranking">
   <thead><tr><th>Rank</th><th>Contributor</th><th>PRs</th></tr></thead>
   <tbody>
-${ranking.rows.map((row) => rankingRow(row, deltas.get(row.user.login) ?? null)).join("\n")}
+${ranking.rows.map((row) => rankingRow(row, deltas.get(row.user.login) ?? null, period)).join("\n")}
   </tbody>
 </table>
 <p class="totals">${ranking.contributorCount} contributors · ${ranking.totalCount} merged PRs</p>`;
@@ -199,22 +226,104 @@ function renderPeriodTabs(
   </nav>`;
 }
 
+function renderUserDetailBody(opts: {
+  period: Period;
+  user: RowUser;
+  prs: ParsedPr[];
+  timeZone: string;
+}): string {
+  const { period, user, prs, timeZone } = opts;
+  const partial = user as Partial<StateUser> & { login: string };
+  const avatar = partial.avatar_url
+    ? `<img src="${escapeHtml(partial.avatar_url)}" alt="" width="48" height="48">`
+    : "";
+  const profileHref = `https://github.com/${encodeURIComponent(partial.login)}`;
+  const repoCount = new Set(prs.map((pr) => pr.repoFullName)).size;
+  const summary = `${prs.length} merged ${pluralize("PR", prs.length)} across ${repoCount} ${pluralize("repository", repoCount, "repositories")}`;
+
+  return `<header class="profile">
+  <a class="back" href="../${escapeHtml(period.param)}.html">← Back to ${escapeHtml(period.label)}</a>
+  <div class="profile-card">
+    ${avatar}
+    <div>
+      <h1><a href="${escapeHtml(profileHref)}" rel="noopener noreferrer">${escapeHtml(partial.login)}</a></h1>
+      <p class="summary">${escapeHtml(summary)}</p>
+    </div>
+  </div>
+</header>
+
+${renderRepoGroups(prs, timeZone)}`;
+}
+
+function renderRepoGroups(prs: ParsedPr[], timeZone: string): string {
+  const byRepo = new Map<string, ParsedPr[]>();
+  for (const pr of prs) {
+    const list = byRepo.get(pr.repoFullName);
+    if (list) list.push(pr);
+    else byRepo.set(pr.repoFullName, [pr]);
+  }
+  const repos = [...byRepo.keys()].sort();
+  return repos
+    .map((repo) => {
+      const repoHref = `https://github.com/${repo
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}`;
+      const items = byRepo
+        .get(repo)!
+        .slice()
+        .sort((a, b) => b.mergedAt.getTime() - a.mergedAt.getTime())
+        .map((pr) => renderPrItem(pr, timeZone))
+        .join("\n");
+      return `<section class="repo-group">
+  <h2><a href="${escapeHtml(repoHref)}" rel="noopener noreferrer">${escapeHtml(repo)}</a></h2>
+  <ul class="prs">
+${items}
+  </ul>
+</section>`;
+    })
+    .join("\n");
+}
+
+function renderPrItem(pr: ParsedPr, timeZone: string): string {
+  const numberLabel = `#${extractPrNumber(pr.htmlUrl)}`;
+  const linkText = pr.title ? `${numberLabel} ${pr.title}` : numberLabel;
+  const isoDateTime = pr.mergedAt.toISOString();
+  const localized = formatInTimeZone(pr.mergedAt, timeZone, "yyyy-MM-dd HH:mm");
+  return `    <li>
+      <a href="${escapeHtml(pr.htmlUrl)}">${escapeHtml(linkText)}</a>
+      <time datetime="${escapeHtml(isoDateTime)}">${escapeHtml(localized)}</time>
+    </li>`;
+}
+
+function extractPrNumber(htmlUrl: string): string {
+  const m = htmlUrl.match(/\/pull\/(\d+)(?:[/?#]|$)/);
+  if (!m) throw new Error(`unexpected PR html_url shape: ${htmlUrl}`);
+  return m[1]!;
+}
+
+function pluralize(noun: string, count: number, plural = `${noun}s`): string {
+  return count === 1 ? noun : plural;
+}
+
 function rankingRow(
   row: { rank: number; user: RowUser; count: number },
   delta: RankDelta,
+  period: Period,
 ): string {
   const user = row.user as Partial<StateUser> & { login: string };
   const avatar = user.avatar_url
     ? `<img src="${escapeHtml(user.avatar_url)}" alt="" width="24" height="24">`
     : "";
   const name = (user as { name?: string }).name ?? user.login;
+  const detailHref = `${period.param}/${user.login}.html`;
   const inactive =
     user.active === false
       ? `<span class="inactive" title="No longer in any tracked team">(inactive)</span>`
       : "";
   return `    <tr>
       <td class="rank"><span class="rank-num">${row.rank}</span>${renderRankDelta(delta)}</td>
-      <td class="contributor">${avatar}<span>${escapeHtml(name)}</span>${inactive}</td>
+      <td class="contributor">${avatar}<a href="${escapeHtml(detailHref)}">${escapeHtml(name)}</a>${inactive}</td>
       <td class="count">${row.count}</td>
     </tr>`;
 }

@@ -59,14 +59,16 @@ interface SearchItem {
   id: number;
   html_url: string;
   repository_url: string;
+  title: string;
   pull_request: { merged_at: string };
 }
 
-function prItem(id: number, repo: string, mergedAt: string): SearchItem {
+function prItem(id: number, repo: string, mergedAt: string, title = `PR ${id}`): SearchItem {
   return {
     id,
     html_url: `https://github.com/${repo}/pull/${id}`,
     repository_url: `https://api.github.com/repos/${repo}`,
+    title,
     pull_request: { merged_at: mergedAt },
   };
 }
@@ -77,7 +79,7 @@ describe("Sync", () => {
       { id: 1, login: "alice", avatar_url: "https://example.com/a.png" },
     ]);
     stubMembers("acme", "infra", []);
-    stubSearch("alice", [prItem(100, "acme/widget", "2026-04-20T09:00:00Z")]);
+    stubSearch("alice", [prItem(100, "acme/widget", "2026-04-20T09:00:00Z", "Add foo")]);
     stubRepo("acme/widget", 50);
 
     const state = new State();
@@ -96,6 +98,7 @@ describe("Sync", () => {
       author_login: "alice",
       merged_at: "2026-04-20T09:00:00Z",
       repo_full_name: "acme/widget",
+      title: "Add foo",
     });
 
     expect(state.syncedAt).toEqual(NOW);

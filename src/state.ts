@@ -31,6 +31,7 @@ export interface StatePullRequest {
   merged_at: string;
   html_url: string;
   repo_full_name: string;
+  title?: string;
   [extra: string]: unknown;
 }
 
