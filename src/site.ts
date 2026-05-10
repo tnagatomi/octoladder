@@ -222,8 +222,8 @@ function rankingRow(
 function renderRankDelta(delta: RankDelta): string {
   if (delta === null) return ` <span class="rank-delta-none" title="No comparison available">—</span>`;
   if (delta === 0) return "";
-  if (delta > 0) return ` <span class="rank-delta-up" title="Up ${delta} from previous period">↑${delta}</span>`;
-  return ` <span class="rank-delta-down" title="Down ${-delta} from previous period">↓${-delta}</span>`;
+  if (delta > 0) return ` <span class="rank-delta-up" title="Up ${delta} from previous period">↑</span>`;
+  return ` <span class="rank-delta-down" title="Down ${-delta} from previous period">↓</span>`;
 }
 
 function renderIndexHtml(target: string | null): string {

@@ -230,9 +230,9 @@ describe("Site", () => {
       const weekly = Period.latestClosed("weekly", NOW, TZ).param;
       const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
       // bob: rank 2 -> 1 (up 1)
-      expect(html).toMatch(/<span class="rank-delta-up"[^>]*>↑1<\/span><\/td>[\s\S]*?<span>bob<\/span>/);
+      expect(html).toMatch(/<span class="rank-delta-up" title="Up 1[^"]*">↑<\/span><\/td>[\s\S]*?<span>bob<\/span>/);
       // alice: rank 1 -> 2 (down 1)
-      expect(html).toMatch(/<span class="rank-delta-down"[^>]*>↓1<\/span><\/td>[\s\S]*?<span>alice<\/span>/);
+      expect(html).toMatch(/<span class="rank-delta-down" title="Down 1[^"]*">↓<\/span><\/td>[\s\S]*?<span>alice<\/span>/);
       // carol: not in previous week -> no comparison
       expect(html).toMatch(/<span class="rank-delta-none"[^>]*>—<\/span><\/td>[\s\S]*?<span>carol<\/span>/);
     });

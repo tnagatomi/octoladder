@@ -66,7 +66,7 @@ table.ranking th, table.ranking td {
 
 table.ranking th { font-weight: 600; color: var(--muted); }
 
-td.rank { width: 5rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+td.rank { width: 4rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 td.rank .rank-num { color: var(--fg); }
 td.rank .rank-delta-up { color: var(--rank-up); font-size: 0.85rem; }
 td.rank .rank-delta-down { color: var(--rank-down); font-size: 0.85rem; }
