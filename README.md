@@ -9,7 +9,7 @@ The action runs in the operator's repository each week (or on manual dispatch):
 1. Reconciles tracked GitHub team membership across one or more orgs.
 2. Fetches newly merged PRs by tracked authors via GitHub's search API.
 3. Persists the canonical state in `data/state.json` (committed back to the operator's repo).
-4. Renders a static site to `site/` with weekly, monthly, and yearly ranking views.
+4. Renders a static site to `site/` with weekly, monthly, and yearly ranking views, plus a per-contributor detail page for each ranked author listing their merged PRs grouped by repository.
 5. The operator's workflow uploads `site/` to GitHub Pages.
 
 Period boundaries (Mon–Sun weekly, calendar months, calendar years) honor the configured time zone (default `Asia/Tokyo`).
