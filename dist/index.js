@@ -47078,6 +47078,27 @@ class Ranking {
     }
 }
 
+;// CONCATENATED MODULE: ./src/ranking-delta.ts
+function computeRankDeltas(current, previous, getKey) {
+    const result = new Map();
+    if (!previous) {
+        for (const row of current.rows) {
+            result.set(getKey(row.user), null);
+        }
+        return result;
+    }
+    const prevRanks = new Map();
+    for (const row of previous.rows) {
+        prevRanks.set(getKey(row.user), row.rank);
+    }
+    for (const row of current.rows) {
+        const key = getKey(row.user);
+        const prev = prevRanks.get(key);
+        result.set(key, prev === undefined ? null : prev - row.rank);
+    }
+    return result;
+}
+
 ;// CONCATENATED MODULE: ./src/site-style.ts
 // Bundled with the action so ncc can pack it into dist/index.js without a
 // runtime asset lookup.
@@ -47087,6 +47108,8 @@ const SITE_STYLE_CSS = `:root {
   --border: #d0d7de;
   --bg: #ffffff;
   --accent: #0969da;
+  --rank-up: #1a6e34;
+  --rank-down: #a4222a;
 }
 
 * { box-sizing: border-box; }
@@ -47145,7 +47168,11 @@ table.ranking th, table.ranking td {
 
 table.ranking th { font-weight: 600; color: var(--muted); }
 
-td.rank { width: 3rem; color: var(--muted); }
+td.rank { width: 5rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+td.rank .rank-num { color: var(--fg); }
+td.rank .rank-delta-up { color: var(--rank-up); font-size: 0.85rem; }
+td.rank .rank-delta-down { color: var(--rank-down); font-size: 0.85rem; }
+td.rank .rank-delta-none { color: var(--border); font-size: 0.85rem; }
 td.count { width: 4rem; text-align: right; font-variant-numeric: tabular-nums; }
 
 td.contributor { display: flex; align-items: center; gap: 0.5rem; }
@@ -47157,6 +47184,7 @@ td.contributor img { border-radius: 50%; }
 `;
 
 ;// CONCATENATED MODULE: ./src/site.ts
+
 
 
 
@@ -47218,15 +47246,20 @@ class Site {
         return periods;
     }
     renderPeriod(period, prev, next, latest) {
+        const ranking = this.rankingFor(period);
+        const prevRanking = prev ? this.rankingFor(prev) : null;
+        const deltas = computeRankDeltas(ranking, prevRanking, (u) => u.login);
+        const body = renderPeriodBody({ period, ranking, deltas, prev, next, latest });
+        const html = renderLayout({ title: period.label, assetPrefix: "../", body });
+        this.writeFile((0,external_node_path_namespaceObject.join)(period.type, `${period.param}.html`), html);
+    }
+    rankingFor(period) {
         const counts = this.prCountsFor(period);
         const entries = [];
         for (const [login, count] of counts) {
             entries.push({ user: this.usersByLogin.get(login) ?? { login }, count });
         }
-        const ranking = new Ranking(entries);
-        const body = renderPeriodBody({ period, ranking, prev, next, latest });
-        const html = renderLayout({ title: period.label, assetPrefix: "../", body });
-        this.writeFile((0,external_node_path_namespaceObject.join)(period.type, `${period.param}.html`), html);
+        return new Ranking(entries);
     }
     renderIndex(latestWeekly) {
         const target = latestWeekly ? `weekly/${latestWeekly.param}.html` : null;
@@ -47265,7 +47298,7 @@ function renderLayout(opts) {
 `;
 }
 function renderPeriodBody(opts) {
-    const { period, ranking, prev, next, latest } = opts;
+    const { period, ranking, deltas, prev, next, latest } = opts;
     const tabs = renderPeriodTabs(period, latest);
     const subtitle = period.subtitle ? `<p class="subtitle">${escapeHtml(period.subtitle)}</p>` : "";
     const prevLink = prev
@@ -47279,7 +47312,7 @@ function renderPeriodBody(opts) {
         : `<table class="ranking">
   <thead><tr><th>Rank</th><th>Contributor</th><th>PRs</th></tr></thead>
   <tbody>
-${ranking.rows.map(rankingRow).join("\n")}
+${ranking.rows.map((row) => rankingRow(row, deltas.get(row.user.login) ?? null)).join("\n")}
   </tbody>
 </table>
 <p class="totals">${ranking.contributorCount} contributors · ${ranking.totalCount} merged PRs</p>`;
@@ -47312,7 +47345,7 @@ function renderPeriodTabs(period, latest) {
     ${items.join("\n    ")}
   </nav>`;
 }
-function rankingRow(row) {
+function rankingRow(row, delta) {
     const user = row.user;
     const avatar = user.avatar_url
         ? `<img src="${escapeHtml(user.avatar_url)}" alt="" width="24" height="24">`
@@ -47322,10 +47355,19 @@ function rankingRow(row) {
         ? `<span class="inactive" title="No longer in any tracked team">(inactive)</span>`
         : "";
     return `    <tr>
-      <td class="rank">${row.rank}</td>
+      <td class="rank"><span class="rank-num">${row.rank}</span>${renderRankDelta(delta)}</td>
       <td class="contributor">${avatar}<span>${escapeHtml(name)}</span>${inactive}</td>
       <td class="count">${row.count}</td>
     </tr>`;
+}
+function renderRankDelta(delta) {
+    if (delta === null)
+        return ` <span class="rank-delta-none" title="No comparison available">—</span>`;
+    if (delta === 0)
+        return "";
+    if (delta > 0)
+        return ` <span class="rank-delta-up" title="Up ${delta} from previous period">↑${delta}</span>`;
+    return ` <span class="rank-delta-down" title="Down ${-delta} from previous period">↓${-delta}</span>`;
 }
 function renderIndexHtml(target) {
     if (!target) {
