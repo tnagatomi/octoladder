@@ -130,6 +130,7 @@ export class Sync {
           merged_at: isoSeconds(pr.merged_at),
           html_url: pr.html_url,
           repo_full_name: pr.repo_full_name,
+          title: pr.title,
         };
         this.state.pullRequests.push(record);
         seenIds.add(pr.github_id);
