@@ -203,6 +203,54 @@ describe("Site", () => {
     });
   });
 
+  describe("rank delta", () => {
+    it("renders up, down, and no-comparison markers based on the previous period", () => {
+      const state = stateWith({
+        anchor: new Date("2026-04-01T00:00:00Z"),
+        users: [
+          makeUser({ github_id: 1, login: "alice" }),
+          makeUser({ github_id: 2, login: "bob" }),
+          makeUser({ github_id: 3, login: "carol" }),
+        ],
+        prs: [
+          // Week of Mon 2026-04-13 JST (previous): alice=2, bob=1.
+          makePullRequest({ github_id: 200, author_login: "alice", merged_at: "2026-04-14T09:00:00Z" }),
+          makePullRequest({ github_id: 201, author_login: "alice", merged_at: "2026-04-15T09:00:00Z" }),
+          makePullRequest({ github_id: 202, author_login: "bob", merged_at: "2026-04-16T09:00:00Z" }),
+          // Week of Mon 2026-04-20 JST (latest): bob=3, alice=1, carol=1.
+          makePullRequest({ github_id: 210, author_login: "bob", merged_at: "2026-04-21T09:00:00Z" }),
+          makePullRequest({ github_id: 211, author_login: "bob", merged_at: "2026-04-22T09:00:00Z" }),
+          makePullRequest({ github_id: 212, author_login: "bob", merged_at: "2026-04-23T09:00:00Z" }),
+          makePullRequest({ github_id: 213, author_login: "alice", merged_at: "2026-04-24T09:00:00Z" }),
+          makePullRequest({ github_id: 214, author_login: "carol", merged_at: "2026-04-25T09:00:00Z" }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+      // bob: rank 2 -> 1 (up 1)
+      expect(html).toMatch(/<span class="rank-delta-up"[^>]*>↑1<\/span><\/td>[\s\S]*?<span>bob<\/span>/);
+      // alice: rank 1 -> 2 (down 1)
+      expect(html).toMatch(/<span class="rank-delta-down"[^>]*>↓1<\/span><\/td>[\s\S]*?<span>alice<\/span>/);
+      // carol: not in previous week -> no comparison
+      expect(html).toMatch(/<span class="rank-delta-none"[^>]*>—<\/span><\/td>[\s\S]*?<span>carol<\/span>/);
+    });
+
+    it("shows no-comparison markers when there is no previous period", () => {
+      const state = stateWith({
+        anchor: new Date("2026-04-20T00:00:00Z"),
+        users: [makeUser()],
+        prs: [makePullRequest({ merged_at: "2026-04-22T09:00:00Z" })],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+      expect(html).toMatch(/<span class="rank-delta-none"[^>]*>—<\/span>/);
+    });
+  });
+
   describe("period-nav prev/next", () => {
     it("omits Next on the latest page of a type", () => {
       const state = stateWith({ anchor: new Date("2025-01-01T00:00:00Z") });
