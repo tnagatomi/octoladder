@@ -136,4 +136,33 @@ describe("State", () => {
     const state = new State({ backfillAnchor: new Date("2025-01-01T00:00:00Z") });
     expect(state.toJSON()["backfill_anchor"]).toBe("2025-01-01");
   });
+
+  it("save then load round-trips a pull request title and tolerates its absence", () => {
+    const path = join(dir, "state.json");
+    new State({
+      pullRequests: [
+        {
+          github_id: 1,
+          author_login: "alice",
+          merged_at: "2026-04-20T10:00:00Z",
+          html_url: "https://github.com/acme/widget/pull/1",
+          repo_full_name: "acme/widget",
+          title: "Add foo to widget",
+        },
+        {
+          github_id: 2,
+          author_login: "alice",
+          merged_at: "2026-04-21T10:00:00Z",
+          html_url: "https://github.com/acme/widget/pull/2",
+          repo_full_name: "acme/widget",
+        },
+      ],
+    }).save(path);
+
+    const loaded = State.load(path);
+    expect(loaded.pullRequests).toHaveLength(2);
+    const [first, second] = loaded.pullRequests;
+    expect(first!.title).toBe("Add foo to widget");
+    expect(second!.title).toBeUndefined();
+  });
 });
