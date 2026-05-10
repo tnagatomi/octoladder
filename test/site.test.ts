@@ -230,11 +230,11 @@ describe("Site", () => {
       const weekly = Period.latestClosed("weekly", NOW, TZ).param;
       const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
       // bob: rank 2 -> 1 (up 1)
-      expect(html).toMatch(/<span class="rank-delta-up" title="Up 1[^"]*">↑<\/span><\/td>[\s\S]*?<span>bob<\/span>/);
+      expect(html).toMatch(/<span class="rank-delta-up" title="Up 1[^"]*">↑<\/span><\/td>[\s\S]*?>bob</);
       // alice: rank 1 -> 2 (down 1)
-      expect(html).toMatch(/<span class="rank-delta-down" title="Down 1[^"]*">↓<\/span><\/td>[\s\S]*?<span>alice<\/span>/);
+      expect(html).toMatch(/<span class="rank-delta-down" title="Down 1[^"]*">↓<\/span><\/td>[\s\S]*?>alice</);
       // carol: not in previous week -> no comparison
-      expect(html).toMatch(/<span class="rank-delta-none"[^>]*>—<\/span><\/td>[\s\S]*?<span>carol<\/span>/);
+      expect(html).toMatch(/<span class="rank-delta-none"[^>]*>—<\/span><\/td>[\s\S]*?>carol</);
     });
 
     it("shows no-comparison markers when there is no previous period", () => {
@@ -248,6 +248,308 @@ describe("Site", () => {
       const weekly = Period.latestClosed("weekly", NOW, TZ).param;
       const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
       expect(html).toMatch(/<span class="rank-delta-none"[^>]*>—<\/span>/);
+    });
+  });
+
+
+  describe("contributor detail page", () => {
+    function detailPath(periodType: string, periodParam: string, login: string): string {
+      return join(dir, periodType, periodParam, `${login}.html`);
+    }
+
+    it("writes a detail page per contributor with PRs in the period", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" }), makeUser({ github_id: 2, login: "bob" })],
+        prs: [
+          makePullRequest({
+            github_id: 100,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+          }),
+          makePullRequest({
+            github_id: 101,
+            author_login: "bob",
+            merged_at: "2026-04-23T09:00:00Z",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      expect(() => readFileSync(detailPath("weekly", weekly, "alice"))).not.toThrow();
+      expect(() => readFileSync(detailPath("weekly", weekly, "bob"))).not.toThrow();
+    });
+
+    it("does not write a detail page for users with no PRs in the period", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" }), makeUser({ github_id: 2, login: "bob" })],
+        prs: [
+          makePullRequest({
+            github_id: 100,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      expect(() => readFileSync(detailPath("weekly", weekly, "bob"))).toThrow();
+    });
+
+    it("renders profile with avatar, GitHub-linked login, and summary", () => {
+      const state = stateWith({
+        users: [
+          makeUser({
+            login: "alice",
+            avatar_url: "https://example.com/a.png",
+          }),
+        ],
+        prs: [
+          makePullRequest({
+            github_id: 100,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+            repo_full_name: "acme/widget",
+          }),
+          makePullRequest({
+            github_id: 101,
+            author_login: "alice",
+            merged_at: "2026-04-23T09:00:00Z",
+            repo_full_name: "acme/gizmo",
+          }),
+          makePullRequest({
+            github_id: 102,
+            author_login: "alice",
+            merged_at: "2026-04-24T09:00:00Z",
+            repo_full_name: "acme/gizmo",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      expect(html).toContain('<img src="https://example.com/a.png"');
+      expect(html).toMatch(
+        /<a href="https:\/\/github\.com\/alice" rel="noopener noreferrer">alice<\/a>/,
+      );
+      expect(html).toMatch(/3 merged PRs across 2 repositories/);
+    });
+
+    it("uses singular wording when there is one PR in one repository", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 100,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+            repo_full_name: "acme/widget",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      expect(html).toMatch(/1 merged PR across 1 repository/);
+    });
+
+    it("includes a Back link to the period page", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 100,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ);
+      const html = readFileSync(detailPath("weekly", weekly.param, "alice"), "utf8");
+      expect(html).toContain(
+        `<a class="back" href="../${weekly.param}.html">← Back to ${weekly.label}</a>`,
+      );
+    });
+
+    it("groups PRs by repo (alphabetical) with repo heading linked to GitHub", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 200,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+            repo_full_name: "zed/widget",
+            html_url: "https://github.com/zed/widget/pull/200",
+          }),
+          makePullRequest({
+            github_id: 201,
+            author_login: "alice",
+            merged_at: "2026-04-23T09:00:00Z",
+            repo_full_name: "acme/widget",
+            html_url: "https://github.com/acme/widget/pull/201",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      const acmeIdx = html.indexOf("acme/widget");
+      const zedIdx = html.indexOf("zed/widget");
+      expect(acmeIdx).toBeGreaterThan(-1);
+      expect(zedIdx).toBeGreaterThan(-1);
+      expect(acmeIdx).toBeLessThan(zedIdx);
+      expect(html).toMatch(
+        /<a href="https:\/\/github\.com\/acme\/widget" rel="noopener noreferrer">acme\/widget<\/a>/,
+      );
+    });
+
+    it("sorts PRs within a repo by merged_at desc", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 1,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+            repo_full_name: "acme/widget",
+            html_url: "https://github.com/acme/widget/pull/1",
+            title: "Older",
+          }),
+          makePullRequest({
+            github_id: 2,
+            author_login: "alice",
+            merged_at: "2026-04-25T09:00:00Z",
+            repo_full_name: "acme/widget",
+            html_url: "https://github.com/acme/widget/pull/2",
+            title: "Newer",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      const newerIdx = html.indexOf("#2 Newer");
+      const olderIdx = html.indexOf("#1 Older");
+      expect(newerIdx).toBeGreaterThan(-1);
+      expect(olderIdx).toBeGreaterThan(-1);
+      expect(newerIdx).toBeLessThan(olderIdx);
+    });
+
+    it("renders the PR link as #number title when title is present", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 5,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+            repo_full_name: "acme/widget",
+            html_url: "https://github.com/acme/widget/pull/5",
+            title: "Add baz",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      expect(html).toContain(
+        `<a href="https://github.com/acme/widget/pull/5">#5 Add baz</a>`,
+      );
+    });
+
+    it("falls back to #number when title is missing", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 9,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+            repo_full_name: "acme/widget",
+            html_url: "https://github.com/acme/widget/pull/9",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      expect(html).toContain(`<a href="https://github.com/acme/widget/pull/9">#9</a>`);
+      expect(html).not.toMatch(/#9 [A-Za-z]/);
+    });
+
+    it("renders <time> with ISO datetime attribute and tz-localized text", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 1,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:15:00Z",
+            repo_full_name: "acme/widget",
+            html_url: "https://github.com/acme/widget/pull/1",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      expect(html).toContain(
+        `<time datetime="2026-04-22T09:15:00.000Z">2026-04-22 18:15</time>`,
+      );
+    });
+
+    it("generates detail pages for inactive contributors too", () => {
+      const state = stateWith({
+        users: [makeUser({ login: "alice", active: false })],
+        prs: [
+          makePullRequest({
+            github_id: 100,
+            author_login: "alice",
+            merged_at: "2026-04-22T09:00:00Z",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+      const html = readFileSync(detailPath("weekly", weekly, "alice"), "utf8");
+      expect(html).toMatch(/alice/);
+    });
+
+    it("writes detail pages for monthly and yearly periods too", () => {
+      const state = stateWith({
+        anchor: new Date("2025-01-01T00:00:00Z"),
+        users: [makeUser({ login: "alice" })],
+        prs: [
+          makePullRequest({
+            github_id: 100,
+            author_login: "alice",
+            merged_at: "2026-03-15T09:00:00Z",
+          }),
+          makePullRequest({
+            github_id: 101,
+            author_login: "alice",
+            merged_at: "2025-12-15T09:00:00Z",
+          }),
+        ],
+      });
+      siteFor(state, dir).call();
+
+      const monthly = Period.latestClosed("monthly", NOW, TZ).param;
+      const yearly = Period.latestClosed("yearly", NOW, TZ).param;
+      expect(() => readFileSync(detailPath("monthly", monthly, "alice"))).not.toThrow();
+      expect(() => readFileSync(detailPath("yearly", yearly, "alice"))).not.toThrow();
     });
   });
 

@@ -35,7 +35,7 @@ export function makePullRequest(overrides: Partial<StatePullRequest> = {}): Stat
     github_id: 100,
     author_login: "alice",
     merged_at: "2026-04-20T09:00:00Z",
-    html_url: "x",
+    html_url: "https://github.com/acme/widget/pull/100",
     repo_full_name: "acme/widget",
     ...overrides,
   };
