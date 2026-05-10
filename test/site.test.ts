@@ -105,6 +105,18 @@ describe("Site", () => {
     expect(html).toMatch(/<td class="count">2<\/td>/);
   });
 
+  it("links the ranking row login to the contributor's detail page", () => {
+    const state = stateWith({
+      users: [makeUser()],
+      prs: [makePullRequest({ github_id: 100, merged_at: "2026-04-22T09:00:00Z" })],
+    });
+    siteFor(state, dir).call();
+
+    const weekly = Period.latestClosed("weekly", NOW, TZ).param;
+    const html = readFileSync(join(dir, "weekly", `${weekly}.html`), "utf8");
+    expect(html).toContain(`<a href="${weekly}/alice.html">alice</a>`);
+  });
+
   it("renders an empty period without crashing", () => {
     const state = stateWith({});
     siteFor(state, dir).call();
